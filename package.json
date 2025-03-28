@@ -1,0 +1,33 @@
+{
+  "name": "max9-claude-mcp",
+  "version": "0.1.0",
+  "description": "MCP server connecting Claude Desktop with Max 9",
+  "main": "src/mcp-server/index.js",
+  "scripts": {
+    "start": "node src/mcp-server/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yasunoritani/v8ui.git"
+  },
+  "keywords": [
+    "max",
+    "max9",
+    "mcp",
+    "claude",
+    "osc",
+    "v8ui"
+  ],
+  "author": "",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/yasunoritani/v8ui/issues"
+  },
+  "homepage": "https://github.com/yasunoritani/v8ui#readme",
+  "dependencies": {
+    "fastmcp": "^0.4.1",
+    "node-osc": "^8.0.11"
+  },
+  "devDependencies": {}
+}
