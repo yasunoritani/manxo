@@ -1,0 +1,12 @@
+{
+  "environment": "development",
+  "max": {
+    "host": "127.0.0.1",
+    "port": 7400,
+    "accessLevel": "full"
+  },
+  "logging": {
+    "level": "info",
+    "file": "logs/mcp-server.log"
+  }
+}
