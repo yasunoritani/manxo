@@ -37,9 +37,13 @@ public:
     
     /**
      * 接続を開始
+     * @param retry_count 接続試行回数
+     * @param retry_interval_ms リトライ間隔（ミリ秒）
      * @return 成功時true、失敗時false
      */
-    bool connect() {
+    bool connect(int retry_count = 3, int retry_interval_ms = 100) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        
         if (connection_state_ == connection_state::connected) {
             return true; // 既に接続済み
         }
@@ -47,60 +51,97 @@ public:
         // 接続中状態に設定
         connection_state_ = connection_state::connecting;
         
-        try {
-            // 以前のソケットがあれば閉じる
-            if (socket_) {
-                disconnect();
+        // リトライループ
+        for (int attempt = 0; attempt <= retry_count; ++attempt) {
+            try {
+                // 以前のソケットがあれば閉じる
+                if (socket_) {
+                    disconnect_socket();
+                }
+                
+                // 新しいUDPソケットを作成
+                socket_ = new UdpTransmitSocket(
+                    IpEndpointName(config_.host.c_str(), config_.port_out)
+                );
+                
+                // 接続状態を設定
+                connection_state_ = connection_state::connected;
+                last_error_ = error_info{ osc_error_code::none, "" };
+                
+                // 実行フラグを設定
+                running_ = true;
+                
+                // 接続成功ログ
+                std::cout << "OSC client connected to " << config_.host << ":" << config_.port_out << std::endl;
+                return true;
             }
-            
-            // 新しいUDPソケットを作成
-            socket_ = new UdpTransmitSocket(
-                IpEndpointName(config_.host.c_str(), config_.port_out)
-            );
-            
-            // 接続状態を設定
-            connection_state_ = connection_state::connected;
-            last_error_ = error_info{ osc_error_code::none, "" };
-            
-            // 実行フラグを設定
-            running_ = true;
-            
-            return true;
-        }
-        catch (const std::exception& e) {
-            // エラー情報を設定
-            last_error_ = error_info{
-                osc_error_code::connection_failed,
-                std::string("Connection failed: ") + e.what()
-            };
-            
-            // 接続状態を更新
-            connection_state_ = connection_state::error;
-            
-            // エラーハンドラを呼び出し
-            if (error_handler_) {
-                error_handler_(last_error_);
+            catch (const std::exception& e) {
+                // 最後の試行でなければ待機して再試行
+                if (attempt < retry_count) {
+                    std::cerr << "Connection attempt " << (attempt + 1) << " failed: " << e.what() 
+                              << ". Retrying in " << retry_interval_ms << "ms..." << std::endl;
+                    std::this_thread::sleep_for(std::chrono::milliseconds(retry_interval_ms));
+                    continue;
+                }
+                
+                // すべての試行が失敗した場合
+                // エラー情報を設定
+                last_error_ = error_info{
+                    osc_error_code::connection_failed,
+                    std::string("Connection failed after ") + std::to_string(retry_count + 1) +
+                    " attempts: " + e.what()
+                };
+                
+                // 接続状態を更新
+                connection_state_ = connection_state::error;
+                
+                // 詳細なエラー情報をログ出力
+                std::cerr << "OSC client connection failed: " << last_error_.message << std::endl;
+                
+                // エラーハンドラをスレッドセーフに呼び出し
+                if (error_handler_) {
+                    error_handler_(last_error_);
+                }
+                
+                return false;
             }
-            
-            return false;
+            catch (...) {
+                // 不明な例外の捕捉
+                last_error_ = error_info{
+                    osc_error_code::unknown_error,
+                    "Unknown connection error occurred"
+                };
+                connection_state_ = connection_state::error;
+                
+                std::cerr << "OSC client: Unknown connection error" << std::endl;
+                
+                if (error_handler_) {
+                    error_handler_(last_error_);
+                }
+                
+                return false;
+            }
         }
+        
+        return false; // ここには到達しないはず
     }
     
     /**
      * 接続を閉じる
      */
     void disconnect() {
-        // スレッドを停止
+        std::lock_guard<std::mutex> lock(mutex_);
+        
+        // 実行フラグをクリア
         running_ = false;
         
-        // ソケットを解放
-        if (socket_) {
-            delete socket_;
-            socket_ = nullptr;
-        }
+        // 内部関数を使用して安全にソケットを閉じる
+        disconnect_socket();
         
         // 接続状態を更新
         connection_state_ = connection_state::disconnected;
+        
+        std::cout << "OSC client disconnected from " << config_.host << ":" << config_.port_out << std::endl;
     }
     
     /**
@@ -146,7 +187,29 @@ public:
                 else if (arg.is_string()) {
                     packet << arg.as_string().c_str();
                 }
-                // TODO: 他の型もサポートする（配列、ブール値など）
+                else if (arg.is_bool()) {
+                    packet << (arg.as_bool() ? true : false);
+                }
+                else if (arg.is_symbol()) {
+                    std::string sym = arg.as_string();
+                    
+                    if (sym == "nil") {
+                        // nil値のOSC送信
+                        packet << osc::Nil;
+                    }
+                    else if (sym == "infinitum") {
+                        // 無限大のOSC送信
+                        packet << osc::Infinitum;
+                    }
+                    else if (sym == "blob" && msg.args.size() > 1) {
+                        // 次の引数がblobサイズを示す場合はスキップ
+                        continue;
+                    }
+                    else {
+                        // それ以外のシンボルは文字列として送信
+                        packet << sym.c_str();
+                    }
+                }
             }
             
             // メッセージの終了
@@ -189,6 +252,7 @@ public:
      * @return 現在の接続状態
      */
     connection_state get_connection_state() const {
+        // 原子変数なのでロックは不要
         return connection_state_;
     }
     
@@ -197,6 +261,7 @@ public:
      * @return エラー情報
      */
     const error_info& get_last_error() const {
+        std::lock_guard<std::mutex> lock(mutex_);
         return last_error_;
     }
     
@@ -205,6 +270,7 @@ public:
      * @return 現在の接続設定
      */
     const connection_config& get_config() const {
+        std::lock_guard<std::mutex> lock(mutex_);
         return config_;
     }
     
@@ -215,20 +281,105 @@ public:
      * @return 成功時true、失敗時false
      */
     bool update_config(const connection_config& config, bool reconnect = true) {
-        // 一旦切断
-        disconnect();
+        bool was_connected = false;
         
-        // 設定を更新
-        config_ = config;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            
+            // 現在の接続状態を保存
+            was_connected = (connection_state_ == connection_state::connected);
+            
+            // 一旦切断 — ロックは内部で取得される
+            if (was_connected) {
+                disconnect_socket();
+            }
+            
+            // Max for Live環境の設定を延長する
+            connection_config new_config = config;
+            
+            // 旧設定から特定の設定を引き継ぐ
+            if (config_.m4l_compatibility && !new_config.m4l_compatibility) {
+                std::cout << "Preserving M4L compatibility mode from previous config" << std::endl;
+                new_config.m4l_compatibility = true;
+            }
+            
+            // ポートが変更されている場合はログ出力
+            if (config_.port_out != new_config.port_out) {
+                std::cout << "Changing output port from " << config_.port_out 
+                          << " to " << new_config.port_out << std::endl;
+            }
+            
+            // 設定を更新
+            config_ = new_config;
+        }
         
         // 再接続が必要な場合
-        if (reconnect) {
+        if (reconnect && was_connected) {
             return connect();
         }
         
         return true;
     }
     
+    /**
+     * OSCメッセージ送信時のエラーハンドリングを強化
+     * @param address 送信先アドレス
+     * @param args 引数
+     * @param retry_on_error エラー時に再試行するか
+     * @return 成功時true
+     */
+    bool send_message_with_error_handling(const std::string& address, const atoms& args, bool retry_on_error = true) {
+        try {
+            return send_osc_message(address, args);
+        } catch (const std::exception& e) {
+            // 送信失敗時のエラー処理
+            error_info err = {osc_error_code::send_failed, std::string("Failed to send OSC message: ") + e.what()};
+            std::cerr << "OSC client error: " << err.message << std::endl;
+            
+            if (error_handler_) {
+                error_handler_(err);
+            }
+            
+            // 接続が切れている場合は再接続を試みる
+            if (retry_on_error && connection_state_ != connection_state::connected) {
+                std::cout << "Connection appears to be broken, attempting to reconnect..." << std::endl;
+                if (connect()) {
+                    std::cout << "Successfully reconnected, retrying send..." << std::endl;
+                    return send_message_with_error_handling(address, args, false); // 再試行は1回のみ
+                }
+            }
+            
+            return false;
+        } catch (...) {
+            // 不明なエラー
+            error_info err = {osc_error_code::unknown_error, "Unknown error during OSC message send"};
+            std::cerr << "OSC client unknown error during send" << std::endl;
+            
+            if (error_handler_) {
+                error_handler_(err);
+            }
+            
+            return false;
+        }
+    }
+
+    /**
+     * 安全にソケットを解放する内部関数
+     * ロックは呼び出し側で取得済みであること
+     */
+    void disconnect_socket() {
+        if (socket_) {
+            try {
+                delete socket_;
+            } catch (const std::exception& e) {
+                std::cerr << "Error during socket cleanup: " << e.what() << std::endl;
+            } catch (...) {
+                std::cerr << "Unknown error during socket cleanup" << std::endl;
+            }
+            socket_ = nullptr;
+        }
+    }
+
 private:
     connection_config config_;       // 接続設定
     UdpTransmitSocket* socket_;      // UDPソケット
@@ -236,6 +387,7 @@ private:
     std::atomic<connection_state> connection_state_;  // 接続状態
     error_info last_error_;          // 最後のエラー
     error_handler error_handler_;    // エラーハンドラ
+    mutable std::mutex mutex_;       // スレッドセーフな操作のためのミューテックス
 };
 
 } // namespace osc

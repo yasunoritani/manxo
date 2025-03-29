@@ -51,7 +51,33 @@ protected:
                 else if (arg->IsString()) {
                     args.push_back(std::string(arg->AsString()));
                 }
-                // TODO: 他の型もサポート（配列、ブール値など）
+                else if (arg->IsBool()) {
+                    args.push_back(arg->AsBool());
+                }
+                else if (arg->IsNil()) {
+                    // nilはMax/Minではシンボル「nil」として扱う
+                    args.push_back(symbol("nil"));
+                }
+                else if (arg->IsInfinitum()) {
+                    // 無限大はMax/Minではシンボル「infinitum」として扱う
+                    args.push_back(symbol("infinitum"));
+                }
+                else if (arg->IsBlob()) {
+                    // BLOBデータは現状サポート外だが、将来の拡張性のために長さを通知
+                    const void* blob_data = arg->AsBlob();
+                    const osc::osc_bundle_element_size_t blob_size = arg->AsBlobSize();
+                    
+                    if (blob_size <= MAX_BLOB_SIZE) {
+                        // シンプルなblobサイズの通知
+                        args.push_back(symbol("blob"));
+                        args.push_back(static_cast<int>(blob_size));
+                    } else {
+                        // 大きすぎるBLOBはセキュリティリスクとして警告
+                        std::cerr << "Oversized blob received (" << blob_size << " bytes)" << std::endl;
+                        args.push_back(symbol("blob_oversized"));
+                    }
+                }
+                // 将来の型拡張のために予約：TimeTag, MIDI, etc.
                 
                 arg++;
             }
@@ -79,8 +105,40 @@ protected:
     }
     
 private:
+    /**
+     * 受信メッセージのセキュリティ検証
+     * 不正なメッセージや大きすぎるメッセージをフィルタリング
+     * 
+     * @param address OSCアドレス
+     * @param sender 送信元ホスト
+     * @return 有効なメッセージならtrue
+     */
+    bool validate_message(const std::string& address, const std::string& sender) {
+        // アドレスパターンの基本的な検証
+        if (address.empty() || address[0] != '/') {
+            std::cerr << "Invalid OSC address pattern: " << address << std::endl;
+            return false;
+        }
+        
+        // アドレスの最大長を制限
+        if (address.length() > 255) {
+            std::cerr << "OSC address pattern too long: " << address.length() << " chars" << std::endl;
+            return false;
+        }
+        
+        // NOTE: ここに追加のセキュリティチェックを実装可能
+        // 例えば、特定のIPアドレスからのみメッセージを受信するなど
+        
+        return true;
+    }
+
+    // 定数
+    static constexpr size_t MAX_BLOB_SIZE = 1024 * 1024; // 1MB
+
+private:
     handler_registry& registry_;     // ハンドラレジストリ
     error_handler error_handler_;    // エラーハンドラ
+    bool debug_mode_ = false;        // デバッグモード
 };
 
 /**
