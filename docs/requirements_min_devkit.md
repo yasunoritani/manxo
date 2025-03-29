@@ -7,13 +7,14 @@
 ## 1. プロジェクト概要
 
 ### 1.1 目的
-Max環境とClaude Desktopを統合し、AIアシスタントの能力を活用できるようにすることで、音楽制作や創造的なサウンドデザインを強化する。Min-DevKit（C++ベース）を中心とした設計により、高性能かつ深い統合を実現し、広範なバージョンのMaxでの互換性を確保する。
+Max環境とClaude Desktopを統合し、AIアシスタントの能力を活用できるようにすることで、音楽制作や創造的なサウンドデザインを強化する。Min-DevKit（C++ベース）を中心とした設計により、高性能かつ深い統合を実現し、スタンドアロンMaxおよびMax for Live（Ableton Live内）の両環境での互換性を確保する。
 
 ### 1.2 背景
 現在のMax環境では、LLMを活用した創造的サウンド生成やプログラミング支援が限定的である。Claude DesktopのAI能力をMax環境に統合することで、音楽家やサウンドデザイナーの創造プロセスを革新的に拡張できる。Min-DevKitを中心とした設計を采用することで、パフォーマンスの向上、Max内部機能への直接アクセス、および広範なMaxバージョン（7.xから8.x）での互換性を確保できる。
 
 ### 1.3 スコープ
-- C++ベースのMin-DevKit開発環境の構築 (Max 7.xおよび8.x互換)
+- C++ベースのMin-DevKit開発環境の構築 (Max 7.x/8.x互換)
+- Max for Live（Ableton Live内）環境対応
 - MaxとClaude Desktop間の高性能な双方向通信の実装
 - OSC通信のC++ベース高速実装
 - 音楽生成、パッチ作成、DSP操作のAIアシスト機能
@@ -107,6 +108,10 @@ Max環境とClaude Desktopを統合し、AIアシスタントの能力を活用�
 - **Min-DevKit**: C++17による拡張開発
   - 公式にはMax 8.2までの対応（Max 9との互換性は検証段階）
   - コア機能とOSC通信の基幹実装に使用
+- **Max for Live環境**: Ableton Live内のMax統合
+  - Ableton Live 10 Suiteに組み込まれたMax環境
+  - `$HOME/Documents/Max`以下のパッケージとデバイスフォルダを活用
+  - Liveバージョン依存のMaxバージョン互換性考慮
 - **oscpack**: OSC通信用C++ライブラリ
   - BSD-3-Clauseライセンス
   - UDP/TCPソケット通信およびOSCメッセージング実装
@@ -210,7 +215,7 @@ Max環境とClaude Desktopを統合し、AIアシスタントの能力を活用�
 
 | 用語 | 説明 |
 |------|------|
-| **Min-DevKit** | Max 9用のC++開発キット、拡張オブジェクト作成フレームワーク |
+| **Min-DevKit** | C++ベースのMax拡張開発キット、Max 7.x/8.x互換、Max for Live環境でも利用可能 |
 | **MCP** | Message Control Protocol、LLMとの通信基盤 |
 | **OSC** | Open Sound Control、音楽・マルチメディア機器間の通信プロトコル |
 | **DSP** | Digital Signal Processing、デジタル信号処理 |
