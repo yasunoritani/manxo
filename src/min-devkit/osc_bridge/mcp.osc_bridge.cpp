@@ -9,6 +9,9 @@ namespace osc {
 }
 }
 
+// Claude Desktopハンドラーをインクルード
+#include "mcp.osc_claude_handler.hpp"
+
 // 実装ファイルのインクルード
 #include "mcp.osc_client.cpp"
 #include "mcp.osc_server.cpp"
@@ -48,11 +51,22 @@ public:
     // 接続状態（読み取り専用）
     attribute<bool> connected { this, "connected", false,
         description {"接続状態"}, readonly_property };
+        
+    // Max for Live互換性モード
+    attribute<bool> m4l_compatibility { this, "m4l_compatibility", true,
+        description {"Max for Live環境での動作を最適化"} };
+        
+    // 動的ポート割り当て
+    attribute<bool> dynamic_ports { this, "dynamic_ports", true,
+        description {"ポート競合を回避するための動的ポート割り当て"} };
+        
+    // 低レイテンシモード（高CPU負荷）
+    attribute<bool> low_latency { this, "low_latency", false,
+        description {"レイテンシを最小化（CPU負荷増加）"} };
     
     // コンストラクタ
     mcp_osc_bridge(const atoms& args = {}) {
-        // クライアントとサーバーの初期化
-        init_client_server();
+        // 初期化は遅延させてMaxの初期化が完了してから行う
         
         // 引数の処理
         if (!args.empty()) {
@@ -186,7 +200,22 @@ public:
     // 初期化完了時の処理
     message<> maxclass_setup { this, "maxclass_setup",
         MIN_FUNCTION {
-            cout << "MCP OSC Bridge initialized" << endl;
+            // M4L環境のライフサイクルイベントを登録
+            class_addmethod(
+                maxclass(),
+                (method)MaxMethod(this, &mcp_osc_bridge::handle_m4l_liveset_loaded),
+                "liveset_loaded",
+                A_CANT,
+                0
+            );
+            
+            // 初期化処理
+            defer([this]() {
+                init_client_server();
+                connect_client_server();
+                cout << "MCP OSC Bridge initialized with M4L compatibility mode" << endl;
+            });
+            
             return {};
         }
     };
@@ -207,11 +236,20 @@ public:
             server_->register_handler(pattern, [this](const std::string& address, const atoms& args) {
                 // メインスレッドで処理するために遅延実行
                 defer([this, address, args]() {
-                    // アドレスとともに引数を出力
-                    atoms message_args = {symbol(address)};
-                    message_args.insert(message_args.end(), args.begin(), args.end());
-                    
-                    output.send(message_args);
+                    // Claude Desktopメッセージの場合は特別処理
+                    if (address.substr(0, 8) == "/claude/") {
+                        handle_claude_message(address, args);
+                    } else if (address.substr(0, 9) == "/ableton/") {
+                        // Abletonコマンドの場合は特別処理が必要な場合がある
+                        atoms message_args = {symbol(address)};
+                        message_args.insert(message_args.end(), args.begin(), args.end());
+                        output.send(message_args);
+                    } else {
+                        // 通常のOSCメッセージ
+                        atoms message_args = {symbol(address)};
+                        message_args.insert(message_args.end(), args.begin(), args.end());
+                        output.send(message_args);
+                    }
                 });
             });
             
@@ -275,6 +313,90 @@ public:
     };
     
 private:
+    // Claude Desktopメッセージの処理
+    void handle_claude_message(const std::string& address, const atoms& args) {
+        // Claude Desktopハンドラーが初期化されていなければ作成
+        if (!claude_handler_) {
+            claude_handler_ = std::make_unique<mcp::osc::claude_handler>(output, error_out);
+        }
+        
+        // Claude Desktopハンドラーにメッセージを渡す
+        claude_handler_->process_message(address, args);
+    }
+    
+    // M4Lライフサイクルイベントハンドラ（Liveセット読み込み時）
+    void handle_m4l_liveset_loaded(t_object* x) {
+        log("Max for Live: Liveset loaded event received");
+        
+        // 切断されていれば再接続
+        if (!connected) {
+            defer([this]() {
+                log("Reconnecting after liveset loaded...");
+                connect_client_server();
+            });
+        }
+        
+        // 接続状態を更新
+        defer([this]() {
+            update_connection_config();
+            send_status_update("liveset_loaded");
+        });
+    }
+    
+    // M4Lライフサイクルイベントハンドラ（Liveセット保存時）
+    void handle_m4l_liveset_saved(t_object* x) {
+        log("Max for Live: Liveset saved event received");
+        
+        // 現在の接続状態を保存できるように状態更新
+        defer([this]() {
+            send_status_update("liveset_saved");
+        });
+    }
+    
+    // M4Lライフサイクルイベントハンドラ（Liveセットクローズ時）
+    void handle_m4l_liveset_closed(t_object* x) {
+        log("Max for Live: Liveset closed event received");
+        
+        // グレースフルに接続を閉じる
+        defer([this]() {
+            // 終了状態を送信してから接続を閉じる
+            send_status_update("liveset_closed");
+            disconnect_client_server();
+        });
+    }
+    
+    // M4Lライフサイクルイベントハンドラ（Liveセット新規作成時）
+    void handle_m4l_liveset_new(t_object* x) {
+        log("Max for Live: New liveset event received");
+        
+        // 新規セットではポート等を再設定
+        defer([this]() {
+            // 動的ポート割り当てを再実行
+            if (dynamic_ports) {
+                update_connection_config();
+            }
+            
+            connect_client_server();
+            send_status_update("liveset_new");
+        });
+    }
+    
+    // 状態更新を送信するヘルパー関数
+    void send_status_update(const std::string& event_type) {
+        if (!client_ || client_->get_connection_state() != mcp::osc::connection_state::connected) {
+            return;
+        }
+        
+        atoms status_args;
+        status_args.push_back(symbol("/mcp/status"));
+        status_args.push_back(symbol(event_type));
+        status_args.push_back(connected);
+        status_args.push_back(port_in);
+        status_args.push_back(port_out);
+        
+        client_->send("/mcp/status", status_args);
+    }
+    
     // クライアントとサーバーの初期化
     void init_client_server() {
         // 接続設定を作成
@@ -325,6 +447,35 @@ private:
         config.port_in = port_in;
         config.port_out = port_out;
         config.buffer_size = buffer_size;
+        
+        // M4L互換性設定を反映
+        config.m4l_compatibility = m4l_compatibility;
+        config.low_latency = low_latency;
+        config.dynamic_ports = dynamic_ports;
+        
+        // 動的ポート割り当てが有効な場合
+        if (dynamic_ports) {
+            // 利用可能なポートを動的に割り当てる
+            config = mcp::osc::port_manager::allocate_dynamic_ports(config);
+            
+            // 設定されたポートを属性に反映
+            port_in = config.port_in;
+            port_out = config.port_out;
+            
+            cout << "Dynamic ports allocated: " << 
+                port_in << " (in), " << 
+                port_out << " (out)" << endl;
+        }
+        
+        // 低レイテンシモードの設定
+        if (low_latency) {
+            cout << "Low latency mode enabled (higher CPU usage)" << endl;
+        }
+        
+        // M4L互換モードの設定
+        if (m4l_compatibility) {
+            cout << "Max for Live compatibility mode enabled" << endl;
+        }
         
         // クライアントとサーバーの設定を更新
         if (client_) {
