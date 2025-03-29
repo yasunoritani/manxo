@@ -1,0 +1,35 @@
+{
+  "name": "max9-claude-mcp",
+  "version": "0.1.0",
+  "author": "",
+  "description": "Max 9とClaude Desktop MCP連携パッケージ",
+  "homepatcher": "mcp_osc_bridge.maxpat",
+  "max_version_min": "8.0",
+  "max_version_max": "none",
+  "os": {
+    "macintosh": {
+      "min_version": "10.13.x",
+      "max_version": "none"
+    },
+    "windows": {
+      "min_version": "10",
+      "max_version": "none"
+    }
+  },
+  "filelist": {
+    "patchers": [
+      "mcp_osc_bridge.maxpat"
+    ],
+    "javascript": [
+      "mcp_osc_bridge.js",
+      "parameter_sync.js",
+      "error_state_manager.js"
+    ]
+  },
+  "website": "",
+  "tags": [
+    "mcp",
+    "claude",
+    "ai"
+  ]
+}
