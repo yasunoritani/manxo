@@ -1,5 +1,9 @@
 # Max 9-Claude Desktop連携プロジェクト要件定義書 (Min-DevKit中心設計)
 
+> **ライセンス情報**: 本プロジェクトではMin-DevKit（MIT License）を使用しています。
+> Copyright 2018, The Min-DevKit Authors. All rights reserved.
+> https://github.com/Cycling74/min-devkit
+
 ## 1. プロジェクト概要
 
 ### 1.1 目的
