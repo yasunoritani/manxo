@@ -127,7 +127,7 @@ SCENARIO("OSC Bridge Basic Tests") {
         atoms args = {"localhost", 7501, 7401};
         
         // オブジェクトインスタンスを作成
-        mcp_osc_bridge bridge(args);
+        osc_bridge bridge(args);
         
         WHEN("Sending connect message") {
             atoms result = bridge.connect(atoms{});
@@ -331,7 +331,7 @@ SCENARIO("M4L Lifecycle Event Tests") {
         
         // M4L互換モードでオブジェクトを作成
         atoms args = {"localhost", 7601, 7602, 1};  // 最後の1はm4l_compatibilityフラグ
-        mcp_osc_bridge bridge(args);
+        osc_bridge bridge(args);
         
         // 接続
         bridge.connect(atoms{});
@@ -704,7 +704,7 @@ SCENARIO("Multi-Instance Tests") {
         ext_main(nullptr);  // 初期化関数を呼び出し
         
         const int instance_count = 3;
-        std::vector<std::unique_ptr<mcp_osc_bridge>> bridges;
+        std::vector<std::unique_ptr<osc_bridge>> bridges;
         std::set<int> used_in_ports;
         std::set<int> used_out_ports;
         
@@ -715,7 +715,7 @@ SCENARIO("Multi-Instance Tests") {
         // 複数インスタンスを作成
         for (int i = 0; i < instance_count; i++) {
             atoms args = {"localhost", base_port_in, base_port_out};
-            bridges.push_back(std::make_unique<mcp_osc_bridge>(args));
+            bridges.push_back(std::make_unique<osc_bridge>(args));
             bridges[i]->connect(atoms{});
             
             // 実際に使用されたポートを記録
