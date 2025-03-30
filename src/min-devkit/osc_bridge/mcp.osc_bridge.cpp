@@ -22,11 +22,10 @@ using namespace c74::min;
  * MCP OSC ブリッジクラス
  * Min-DevKitオブジェクトとして実装
  */
-class mcp_osc_bridge : public object<mcp_osc_bridge> {
+class osc_bridge : public object<osc_bridge> {
 public:
     // メタデータ
     MIN_DESCRIPTION {"OSC Bridge for MCP-Max integration"};
-    MIN_TAGS        {"mcp", "osc", "communication"};
     MIN_AUTHOR      {"Max9-Claude Desktop Project"};
     MIN_RELATED     {"udpsend, udpreceive, oscformat, oscparse"};
 
@@ -34,6 +33,18 @@ public:
     inlet<>  input  { this, "(anything) Command to send via OSC" };
     outlet<> output { this, "(anything) Received OSC messages" };
     outlet<> error_out { this, "(anything) Error messages" };
+    
+    // 遅延処理用のキュー
+    queue<> task_queue { this,
+        MIN_FUNCTION {
+            if (!deferred_tasks.empty()) {
+                auto task = deferred_tasks.front();
+                deferred_tasks.pop_front();
+                task();
+            }
+            return {};
+        }
+    };
 
     // 接続設定の属性
     attribute<symbol> host { this, "host", "localhost",
@@ -50,7 +61,7 @@ public:
     
     // 接続状態（読み取り専用）
     attribute<bool> connected { this, "connected", false,
-        description {"接続状態"}, readonly_property };
+        description {"接続状態"} };
         
     // Max for Live互換性モード
     attribute<bool> m4l_compatibility { this, "m4l_compatibility", true,
@@ -65,7 +76,7 @@ public:
         description {"レイテンシを最小化（CPU負荷増加）"} };
     
     // コンストラクタ
-    mcp_osc_bridge(const atoms& args = {}) {
+    osc_bridge(const atoms& args = {}) {
         // 初期化は遅延させてMaxの初期化が完了してから行う
         
         // 引数の処理
@@ -83,7 +94,7 @@ public:
     }
     
     // デストラクタ
-    ~mcp_osc_bridge() {
+    ~osc_bridge() {
         // 接続を閉じる
         disconnect();
     }
@@ -201,16 +212,41 @@ public:
     message<> maxclass_setup { this, "maxclass_setup",
         MIN_FUNCTION {
             // M4L環境のライフサイクルイベントを登録
-            class_addmethod(
-                maxclass(),
-                (method)MaxMethod(this, &mcp_osc_bridge::handle_m4l_liveset_loaded),
+            void* c = args[0];
+            c74::max::class_addmethod(
+                (c74::max::t_class*)c,
+                (c74::max::method)handle_m4l_liveset_loaded_wrapper,
                 "liveset_loaded",
-                A_CANT,
+                c74::max::A_CANT,
+                0
+            );
+            
+            c74::max::class_addmethod(
+                (c74::max::t_class*)c,
+                (c74::max::method)handle_m4l_liveset_saved_wrapper,
+                "liveset_saved",
+                c74::max::A_CANT,
+                0
+            );
+            
+            c74::max::class_addmethod(
+                (c74::max::t_class*)c,
+                (c74::max::method)handle_m4l_liveset_closed_wrapper,
+                "liveset_closed",
+                c74::max::A_CANT,
+                0
+            );
+            
+            c74::max::class_addmethod(
+                (c74::max::t_class*)c,
+                (c74::max::method)handle_m4l_liveset_new_wrapper,
+                "liveset_new",
+                c74::max::A_CANT,
                 0
             );
             
             // 初期化処理
-            defer([this]() {
+            defer_task([this]() {
                 init_client_server();
                 connect_client_server();
                 cout << "MCP OSC Bridge initialized with M4L compatibility mode" << endl;
@@ -235,7 +271,7 @@ public:
             // ハンドラを登録
             server_->register_handler(pattern, [this](const std::string& address, const atoms& args) {
                 // メインスレッドで処理するために遅延実行
-                defer([this, address, args]() {
+                defer_task([this, address, args]() {
                     // Claude Desktopメッセージの場合は特別処理
                     if (address.substr(0, 8) == "/claude/") {
                         handle_claude_message(address, args);
@@ -313,6 +349,51 @@ public:
     };
     
 private:
+    // Claude Desktopハンドラー
+    std::unique_ptr<mcp::osc::claude_handler> claude_handler_;
+    
+    // 遅延タスク用キュー
+    std::deque<std::function<void()>> deferred_tasks;
+    
+    // タスクの遅延実行
+    void defer_task(std::function<void()> task) {
+        deferred_tasks.push_back(task);
+        task_queue.set();
+    }
+    
+    // 静的ラッパー関数（M4Lライフサイクルイベント用）
+    static void* handle_m4l_liveset_loaded_wrapper(void* x) {
+        osc_bridge* self = (osc_bridge*)x;
+        if (self) {
+            self->handle_m4l_liveset_loaded(x);
+        }
+        return nullptr;
+    }
+    
+    static void* handle_m4l_liveset_saved_wrapper(void* x) {
+        osc_bridge* self = (osc_bridge*)x;
+        if (self) {
+            self->handle_m4l_liveset_saved(x);
+        }
+        return nullptr;
+    }
+    
+    static void* handle_m4l_liveset_closed_wrapper(void* x) {
+        osc_bridge* self = (osc_bridge*)x;
+        if (self) {
+            self->handle_m4l_liveset_closed(x);
+        }
+        return nullptr;
+    }
+    
+    static void* handle_m4l_liveset_new_wrapper(void* x) {
+        osc_bridge* self = (osc_bridge*)x;
+        if (self) {
+            self->handle_m4l_liveset_new(x);
+        }
+        return nullptr;
+    }
+    
     // Claude Desktopメッセージの処理
     void handle_claude_message(const std::string& address, const atoms& args) {
         // Claude Desktopハンドラーが初期化されていなければ作成
@@ -325,40 +406,40 @@ private:
     }
     
     // M4Lライフサイクルイベントハンドラ（Liveセット読み込み時）
-    void handle_m4l_liveset_loaded(t_object* x) {
-        log("Max for Live: Liveset loaded event received");
+    void handle_m4l_liveset_loaded(void* x) {
+        cout << "Max for Live: Liveset loaded event received" << endl;
         
         // 切断されていれば再接続
         if (!connected) {
-            defer([this]() {
-                log("Reconnecting after liveset loaded...");
+            defer_task([this]() {
+                cout << "Reconnecting after liveset loaded..." << endl;
                 connect_client_server();
             });
         }
         
         // 接続状態を更新
-        defer([this]() {
+        defer_task([this]() {
             update_connection_config();
             send_status_update("liveset_loaded");
         });
     }
     
     // M4Lライフサイクルイベントハンドラ（Liveセット保存時）
-    void handle_m4l_liveset_saved(t_object* x) {
-        log("Max for Live: Liveset saved event received");
+    void handle_m4l_liveset_saved(void* x) {
+        cout << "Max for Live: Liveset saved event received" << endl;
         
         // 現在の接続状態を保存できるように状態更新
-        defer([this]() {
+        defer_task([this]() {
             send_status_update("liveset_saved");
         });
     }
     
     // M4Lライフサイクルイベントハンドラ（Liveセットクローズ時）
-    void handle_m4l_liveset_closed(t_object* x) {
-        log("Max for Live: Liveset closed event received");
+    void handle_m4l_liveset_closed(void* x) {
+        cout << "Max for Live: Liveset closed event received" << endl;
         
         // グレースフルに接続を閉じる
-        defer([this]() {
+        defer_task([this]() {
             // 終了状態を送信してから接続を閉じる
             send_status_update("liveset_closed");
             disconnect_client_server();
@@ -366,11 +447,11 @@ private:
     }
     
     // M4Lライフサイクルイベントハンドラ（Liveセット新規作成時）
-    void handle_m4l_liveset_new(t_object* x) {
-        log("Max for Live: New liveset event received");
+    void handle_m4l_liveset_new(void* x) {
+        cout << "Max for Live: New liveset event received" << endl;
         
         // 新規セットではポート等を再設定
-        defer([this]() {
+        defer_task([this]() {
             // 動的ポート割り当てを再実行
             if (dynamic_ports) {
                 update_connection_config();
@@ -390,9 +471,9 @@ private:
         atoms status_args;
         status_args.push_back(symbol("/mcp/status"));
         status_args.push_back(symbol(event_type));
-        status_args.push_back(connected);
-        status_args.push_back(port_in);
-        status_args.push_back(port_out);
+        status_args.push_back(connected.get());
+        status_args.push_back(port_in.get());
+        status_args.push_back(port_out.get());
         
         client_->send("/mcp/status", status_args);
     }
@@ -401,7 +482,7 @@ private:
     void init_client_server() {
         // 接続設定を作成
         mcp::osc::connection_config config;
-        config.host = host.get();
+        config.host = static_cast<std::string>(host.get());
         config.port_in = port_in;
         config.port_out = port_out;
         config.buffer_size = buffer_size;
@@ -412,7 +493,7 @@ private:
         // クライアントのエラーハンドラを設定
         client_->set_error_handler([this](const mcp::osc::error_info& error) {
             // メインスレッドで処理するために遅延実行
-            defer([this, error]() {
+            defer_task([this, error]() {
                 // エラーを出力
                 error_out.send("client_error", error.message);
                 
@@ -428,7 +509,7 @@ private:
         // サーバーのエラーハンドラを設定
         server_->set_error_handler([this](const mcp::osc::error_info& error) {
             // メインスレッドで処理するために遅延実行
-            defer([this, error]() {
+            defer_task([this, error]() {
                 // エラーを出力
                 error_out.send("server_error", error.message);
                 
@@ -443,7 +524,7 @@ private:
     void update_connection_config() {
         // 接続設定を作成
         mcp::osc::connection_config config;
-        config.host = host.get();
+        config.host = static_cast<std::string>(host.get());
         config.port_in = port_in;
         config.port_out = port_out;
         config.buffer_size = buffer_size;
@@ -539,4 +620,4 @@ private:
 };
 
 // オブジェクトの登録
-MIN_EXTERNAL(mcp_osc_bridge);
+MIN_EXTERNAL(osc_bridge);
