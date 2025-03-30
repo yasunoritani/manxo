@@ -48,6 +48,9 @@ if(APPLE)
     
     # M4L環境用の最適化設定
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -fvisibility-inlines-hidden")
+    
+    # アーキテクチャの確認メッセージ
+    message(STATUS "Building for architectures: ${CMAKE_OSX_ARCHITECTURES}")
 endif()
 
 # OSCPackライブラリの設定
@@ -63,8 +66,9 @@ endif()
 # oscpackライブラリの設定
 include_directories("${OSCPACK_ROOT_DIR}")
 
-# oscpackライブラリパスの候補
+# oscpackライブラリパスの候補 - build_universalを優先的に検索
 set(OSCPACK_LIB_CANDIDATES
+    "${OSCPACK_ROOT_DIR}/build_universal/liboscpack.a"  # 優先度最高（ユニバーサルビルド）
     "${OSCPACK_ROOT_DIR}/build/liboscpack.a"
     "${OSCPACK_ROOT_DIR}/lib/liboscpack.a"
     "${OSCPACK_ROOT_DIR}/build/oscpack.lib"
@@ -82,6 +86,15 @@ endforeach()
 # OSCpackをプリリンクするためにターゲットに追加
 if(DEFINED OSCPACK_LIB)
     message(STATUS "Using oscpack library: ${OSCPACK_LIB}")
+    
+    # ユニバーサルビルドのチェック（macOSのみ）
+    if(APPLE AND OSCPACK_LIB MATCHES "build_universal/liboscpack.a")
+        message(STATUS "Using universal build of oscpack library")
+    elseif(APPLE)
+        message(WARNING "Not using the universal build of oscpack library. This may cause architecture compatibility issues.")
+        message(WARNING "Run 'oscpack/build_universal.sh' to create a universal binary.")
+    endif()
+    
     target_link_libraries(${PROJECT_NAME} PUBLIC "${OSCPACK_LIB}")
 else()
     message(STATUS "Using generic oscpack library")
