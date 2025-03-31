@@ -6,7 +6,14 @@ project(osc_bridge)
 
 # Min-APIパスの設定
 if (NOT DEFINED C74_MIN_API_DIR)
-    set(C74_MIN_API_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../min-dev/min-devkit/source/min-api")
+    # GitHubからクローンしたmin-devリポジトリを使用
+    set(C74_MIN_API_DIR "/Users/mymac/v8ui/min-dev/min-devkit/source/min-api")
+    
+    if(NOT EXISTS "${C74_MIN_API_DIR}")
+        message(FATAL_ERROR "Min-API not found at: ${C74_MIN_API_DIR}")
+    else()
+        message(STATUS "Using Min-API from cloned repository: ${C74_MIN_API_DIR}")
+    endif()
 endif()
 
 # Min-DevKitの構成スクリプトをインクルード
