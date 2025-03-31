@@ -1,0 +1,112 @@
+name: OSC Bridge Tests
+
+on:
+  push:
+    branches: [ main, feature/*, release/* ]
+    paths:
+      - 'src/min-devkit/osc_bridge/**'
+      - '.github/workflows/osc_bridge_tests.yml'
+    # toolsディレクトリは明示的に除外する必要はない（.gitignoreで保護されていると仮定）
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src/min-devkit/osc_bridge/**'
+
+jobs:
+  test:
+    name: OSC Bridge Tests on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-11, macos-latest]  # Intel MacとApple Silicon Macの両方をカバー
+    
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+      
+      - name: Install dependencies
+        run: |
+          brew install cmake
+          
+          # oscpackのユニバーサルビルド
+          cd $GITHUB_WORKSPACE/oscpack
+          if [ -f "./build_universal.sh" ]; then
+            chmod +x ./build_universal.sh
+            ./build_universal.sh
+          else
+            echo "Warning: build_universal.sh not found, using default build"
+            mkdir -p build && cd build
+            cmake .. && make
+          fi
+      
+      - name: Verify gitignore protections
+        run: |
+          if [ -d "$GITHUB_WORKSPACE/tools" ]; then
+            echo "⚠️ Warning: tools directory found - this should NOT be committed"
+            echo "Checking .gitignore settings..."
+            if grep -q "^/tools" $GITHUB_WORKSPACE/.gitignore || grep -q "^tools/" $GITHUB_WORKSPACE/.gitignore; then
+              echo "✅ tools directory is properly excluded in .gitignore"
+            else
+              echo "❌ ERROR: tools directory is not properly excluded in .gitignore"
+              exit 1
+            fi
+          fi
+      
+      - name: Build and Test
+        run: |
+          chmod +x $GITHUB_WORKSPACE/run_tests.sh
+          $GITHUB_WORKSPACE/run_tests.sh
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: test-results-${{ matrix.os }}
+          path: ${{ github.workspace }}/docs/test_results/
+          retention-days: 14
+      
+      - name: Post test results comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            // 最新のテスト結果ファイルを検索
+            const testResultsDir = path.join(process.env.GITHUB_WORKSPACE, 'docs/test_results');
+            const files = fs.readdirSync(testResultsDir)
+              .filter(file => file.startsWith('test_result_'))
+              .sort()
+              .reverse();
+              
+            if (files.length === 0) {
+              console.log('No test result files found');
+              return;
+            }
+            
+            const latestFile = path.join(testResultsDir, files[0]);
+            const testResults = fs.readFileSync(latestFile, 'utf8');
+            
+            // テスト結果の概要を抽出
+            const lines = testResults.split('\n');
+            const summary = lines
+              .filter(line => 
+                line.includes('test cases') || 
+                line.includes('assertions') || 
+                line.includes('テスト結果:')
+              )
+              .join('\n');
+            
+            // PR番号の取得
+            const prNumber = context.issue.number;
+            
+            // コメントの投稿
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              body: `## OSC Bridge Test Results on ${{ matrix.os }}\n\n\`\`\`\n${summary}\n\`\`\`\n\n詳細は添付されたテスト結果を確認してください。`
+            });
