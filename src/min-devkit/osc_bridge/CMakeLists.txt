@@ -6,13 +6,23 @@ project(osc_bridge)
 
 # Min-APIパスの設定
 if (NOT DEFINED C74_MIN_API_DIR)
-    # GitHubからクローンしたmin-devリポジトリを使用
-    set(C74_MIN_API_DIR "/Users/mymac/v8ui/min-dev/min-devkit/source/min-api")
+    # GitHubからクローンしたmin-devリポジトリを使用するが、相対パスで参照
+    set(C74_MIN_API_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../min-dev/min-devkit/source/min-api")
     
     if(NOT EXISTS "${C74_MIN_API_DIR}")
-        message(FATAL_ERROR "Min-API not found at: ${C74_MIN_API_DIR}")
+        message(WARNING "Min-API not found at relative path: ${C74_MIN_API_DIR}")
+        message(STATUS "Trying alternative relative paths...")
+        
+        # 代替パスを試す
+        set(ALT_MIN_API_DIR "${CMAKE_SOURCE_DIR}/min-dev/min-devkit/source/min-api")
+        if(EXISTS "${ALT_MIN_API_DIR}")
+            set(C74_MIN_API_DIR "${ALT_MIN_API_DIR}")
+            message(STATUS "Found Min-API at: ${C74_MIN_API_DIR}")
+        else()
+            message(FATAL_ERROR "Min-API not found in any expected location. Please set C74_MIN_API_DIR manually.")
+        endif()
     else()
-        message(STATUS "Using Min-API from cloned repository: ${C74_MIN_API_DIR}")
+        message(STATUS "Using Min-API from relative path: ${C74_MIN_API_DIR}")
     endif()
 endif()
 
