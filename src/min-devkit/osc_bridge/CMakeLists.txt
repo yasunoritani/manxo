@@ -148,41 +148,64 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 include(${C74_MIN_API_DIR}/script/min-posttarget.cmake)
 
 #############################################################
-# M4L環境テスト（Issue 21）
+# M4L環境テスト（Issue 21 & 22）
 #############################################################
 
 # テストオプションの設定（デフォルトでは無効）
 option(BUILD_OSC_BRIDGE_TESTS "Build OSC Bridge test suite" OFF)
 
 if(BUILD_OSC_BRIDGE_TESTS)
-    # 各テストファイルごとにテストターゲットを作成
-    foreach(TEST_FILE ${TEST_FILES})
-        # ファイル名からターゲット名を生成
-        get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
-        set(TEST_TARGET "test_${TEST_NAME}")
-        
-        # テストターゲットの追加
-        add_executable(${TEST_TARGET} ${TEST_FILE})
-        
-        # テストに必要なライブラリをリンク
-        target_link_libraries(${TEST_TARGET} PUBLIC ${OSCPACK_LIB})
-        
-        # テスト固有の設定
-        target_compile_definitions(${TEST_TARGET} PRIVATE
-            MCP_OSC_TEST
-            _CRT_SECURE_NO_WARNINGS
-            NOMINMAX
-        )
-        
-        # テスト出力ディレクトリの設定
-        set_target_properties(${TEST_TARGET} PROPERTIES
-            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests"
-        )
-        
-        message(STATUS "Configured test target: ${TEST_TARGET}")
-    endforeach()
+    # Catch2のインストール（Issue 22：テストフレームワーク統合）
+    include(FetchContent)
+    FetchContent_Declare(
+        Catch2
+        GIT_REPOSITORY https://github.com/catchorg/Catch2.git
+        GIT_TAG v2.13.8 # M4L環境との互換性確認済み
+    )
+    FetchContent_MakeAvailable(Catch2)
     
-    message(STATUS "OSC Bridge tests enabled. Use -DBUILD_OSC_BRIDGE_TESTS=OFF to disable.")
+    # Catch2の検出とインクルード
+    find_package(Catch2 REQUIRED)
+    include(${Catch2_SOURCE_DIR}/contrib/Catch.cmake)
+    
+    # 統合テスト実行ファイルの設定
+    add_executable(test_osc_bridge 
+        tests/catch_main.cpp # メインエントリーポイント
+        ${TEST_FILES}
+    )
+    
+    # Catch2とOSCPackをリンク
+    target_link_libraries(test_osc_bridge 
+        PRIVATE 
+        Catch2::Catch2 
+        "${OSCPACK_LIB}"
+    )
+    
+    # テスト固有の設定
+    target_compile_definitions(test_osc_bridge PRIVATE
+        MCP_OSC_TEST
+        _CRT_SECURE_NO_WARNINGS
+        NOMINMAX
+    )
+    
+    # macOS固有のリンクオプション（テスト用）
+    if(APPLE)
+        target_link_libraries(test_osc_bridge PRIVATE
+            "-framework CoreFoundation"
+            "-framework CoreAudio"
+        )
+    endif()
+    
+    # テスト出力ディレクトリの設定
+    set_target_properties(test_osc_bridge PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests"
+    )
+    
+    # 各テストの追加（Catch2の自動検出機能のための準備）
+    catch_discover_tests(test_osc_bridge)
+    
+    message(STATUS "OSC Bridge tests enabled with Catch2 framework v2.13.8")
+    message(STATUS "Use -DBUILD_OSC_BRIDGE_TESTS=OFF to disable tests")
 else()
     message(STATUS "OSC Bridge tests disabled. Use -DBUILD_OSC_BRIDGE_TESTS=ON to enable.")
 endif()
