@@ -1,94 +1,197 @@
-// マルチインスタンスのテスト
-SCENARIO("Multi-Instance Tests") {
+/// @file
+///@ingroup mcpmodules
+///@copyrightCopyright 2025 The Max 9-Claude Desktop Integration Project. All rights reserved.
+///@licenseUse of this source code is governed by the MIT License found in the License.md file.
+
+// 複数インスタンステスト
+// M4L環境での複数OSC Bridgeインスタンス共存のテスト
+
+// テストフレームワークのインクルード
+#include "c74_min.h"
+#include "c74_min_catch.h"
+
+// テスト対象のインクルード
+#include "max_wrapper.hpp"
+#include "mcp.osc_types.hpp"
+
+// 標準ライブラリ
+#include <random>
+#include <thread>
+#include <chrono>
+#include <vector>
+#include <mutex>
+#include <unordered_map>
+
+// ランダムポート生成用ヘルパー関数
+int random_port(int min, int max) {
+    static std::random_device rd;
+    static std::mt19937 gen(rd());
+    std::uniform_int_distribution<> dist(min, max);
+    return dist(gen);
+}
+
+SCENARIO("Multiple OSC Bridge Instances Test") {
     
-    GIVEN("Multiple OSC bridge instances") {
-        ext_main(nullptr);  // 初期化関数を呼び出し
+    GIVEN("Multiple OSC bridges running simultaneously") {
+        const int instance_count = 3; // テストするインスタンス数
         
-        const int instance_count = 3;
-        std::vector<std::unique_ptr<osc_bridge>> bridges;
-        std::set<int> used_in_ports;
-        std::set<int> used_out_ports;
-        
-        // 基本ポート
-        int base_port_in = random_port(20000, 25000);
-        int base_port_out = random_port(25001, 30000);
-        
-        // 複数インスタンスを作成
-        for (int i = 0; i < instance_count; i++) {
-            atoms args = {"localhost", base_port_in, base_port_out};
-            bridges.push_back(std::make_unique<osc_bridge>(args));
-            bridges[i]->connect(atoms{});
+        // テスト用の受信カウンター
+        struct ReceiveCounter {
+            std::mutex mtx;
+            std::unordered_map<int, int> counts;
             
-            // 実際に使用されたポートを記録
-            used_in_ports.insert(bridges[i]->get_in_port());
-            used_out_ports.insert(bridges[i]->get_out_port());
-        }
-        
-        WHEN("All instances are running concurrently") {
-            THEN("Each instance should have unique ports") {
-                // 使用されたポート数がインスタンス数と一致するか確認
-                CHECK(used_in_ports.size() == instance_count);
-                CHECK(used_out_ports.size() == instance_count);
+            void increment(int instance_id) {
+                std::lock_guard<std::mutex> lock(mtx);
+                counts[instance_id]++;
             }
+            
+            int get_count(int instance_id) {
+                std::lock_guard<std::mutex> lock(mtx);
+                return counts[instance_id];
+            }
+        };
+        
+        ReceiveCounter counter;
+        
+        // インスタンス管理用コンテナ
+        std::vector<mcp::osc::server> servers;
+        std::vector<mcp::osc::client> clients;
+        std::vector<int> server_ports;
+        
+        // 複数のインスタンスを初期化
+        for (int i = 0; i < instance_count; i++) {
+            // 動的ポート割り当てのため、ベースポートを設定
+            int base_port = random_port(45000 + i * 1000, 46000 + i * 1000);
+            server_ports.push_back(base_port);
+            
+            // サーバー設定
+            mcp::osc::connection_config server_config;
+            server_config.host = "localhost";
+            server_config.port_in = base_port;
+            server_config.port_retry_count = 5; // ポート競合時の試行回数
+            server_config.auto_reconnect = true;
+            
+            // サーバーインスタンス作成
+            servers.emplace_back(server_config);
+            
+            // 最終追加されたサーバーへの参照
+            auto& server = servers.back();
+            
+            // テスト用のハンドラーを登録
+            int instance_id = i;
+            server.register_handler("/test/multi", [&counter, instance_id](const std::string& addr, const atoms& args) {
+                counter.increment(instance_id);
+            });
+            
+            // サーバー起動
+            server.connect();
+            
+            // クライアント設定
+            mcp::osc::connection_config client_config;
+            client_config.host = "localhost";
+            client_config.port_out = server.get_bound_port(); // 実際にバインドされたポートを使用
+            client_config.auto_reconnect = true;
+            
+            // クライアントインスタンス作成
+            clients.emplace_back(client_config);
+            
+            // クライアント接続
+            clients.back().connect();
         }
         
-        WHEN("Sending messages through all instances") {
-            bool all_sent = true;
+        // セットアップ完了まで短く待機
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        
+        WHEN("Sending messages to each instance") {
+            const int messages_per_instance = 10;
             
+            // 各インスタンスに複数のメッセージを送信
             for (int i = 0; i < instance_count; i++) {
-                atoms message = {"test_multi", i};
-                atoms result = bridges[i]->anything(message);
-                
-                if (!result.empty()) {
-                    all_sent = false;
+                for (int j = 0; j < messages_per_instance; j++) {
+                    atoms args = {j};
+                    clients[i].send("/test/multi", args);
                 }
             }
             
-            THEN("All instances should send without errors") {
-                CHECK(all_sent);
+            // 処理待ち
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
+            
+            THEN("Each instance should receive correct message count") {
+                for (int i = 0; i < instance_count; i++) {
+                    // 各インスタンスがメッセージ数分だけ受信しているか検証
+                    CHECK(counter.get_count(i) == messages_per_instance);
+                }
             }
         }
         
         WHEN("One instance is disconnected") {
-            // 2番目のインスタンスを切断
-            bridges[1]->disconnect(atoms{});
+            // 現在のカウント状態をキャプチャ
+            std::vector<int> before_counts;
+            for (int i = 0; i < instance_count; i++) {
+                before_counts.push_back(counter.get_count(i));
+            }
+            
+            // 1つのインスタンスを切断（例：最初のインスタンス）
+            int disconnected_idx = 0;
+            servers[disconnected_idx].disconnect();
+            
+            // 残りのインスタンスにメッセージを送信
+            for (int i = 0; i < instance_count; i++) {
+                if (i != disconnected_idx) {
+                    atoms args = {"after_disconnect"};
+                    clients[i].send("/test/multi", args);
+                }
+            }
+            
+            // 処理待ち
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
             
             THEN("Other instances should continue to function") {
-                // 1番目と3番目のインスタンスがまだ動作するか確認
-                atoms message = {"test_after_disconnect"};
-                CHECK(bridges[0]->anything(message).empty());
-                CHECK(bridges[2]->anything(message).empty());
-            }
-        }
-        
-        WHEN("All instances are restarted") {
-            // 全インスタンスを切断
-            for (auto& bridge : bridges) {
-                bridge->disconnect(atoms{});
-            }
-            
-            // 全インスタンスを再接続
-            bool all_reconnected = true;
-            for (auto& bridge : bridges) {
-                atoms result = bridge->connect(atoms{});
-                if (!result.empty()) {
-                    all_reconnected = false;
-                }
-            }
-            
-            THEN("All instances should reconnect successfully") {
-                CHECK(all_reconnected);
+                // 切断されたインスタンスのカウントは変化しないはず
+                CHECK(counter.get_count(disconnected_idx) == before_counts[disconnected_idx]);
                 
-                // 全インスタンスが機能するか確認
-                for (auto& bridge : bridges) {
-                    CHECK(bridge->anything(atoms{"test_reconnect"}).empty());
+                // 他のインスタンスは新しいメッセージを受信しているはず
+                for (int i = 0; i < instance_count; i++) {
+                    if (i != disconnected_idx) {
+                        CHECK(counter.get_count(i) == before_counts[i] + 1);
+                    }
                 }
             }
         }
         
-        // クリーンアップ
-        for (auto& bridge : bridges) {
-            bridge->disconnect(atoms{});
+        WHEN("Instances use conflicting ports") {
+            // 意図的にポート競合をシミュレート
+            if (instance_count >= 2) {
+                // 新しいインスタンスを作成し、既存のポートを使用
+                int existing_port = servers[0].get_bound_port();
+                
+                mcp::osc::connection_config conflict_server_config;
+                conflict_server_config.host = "localhost";
+                conflict_server_config.port_in = existing_port; // 既に使用中のポート
+                conflict_server_config.port_retry_count = 3; // 再試行回数
+                
+                mcp::osc::server conflict_server(conflict_server_config);
+                
+                // 接続試行（動的ポート割り当てにより別のポートにバインドされるはず）
+                bool connect_result = conflict_server.connect();
+                int new_port = conflict_server.get_bound_port();
+                
+                THEN("New instance should bind to a different port") {
+                    CHECK(connect_result);
+                    CHECK(new_port != existing_port);
+                    CHECK(new_port > existing_port);
+                    CHECK(new_port <= existing_port + conflict_server_config.port_retry_count);
+                }
+                
+                // テスト後のクリーンアップ
+                conflict_server.disconnect();
+            }
+        }
+        
+        // 全インスタンスのクリーンアップ
+        for (int i = 0; i < instance_count; i++) {
+            clients[i].disconnect();
+            servers[i].disconnect();
         }
     }
 }

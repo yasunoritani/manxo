@@ -1,0 +1,116 @@
+{
+  "projectRules": {
+    "name": "v8ui OSC Bridge 開発ルール",
+    "version": "1.1.1",
+    "lastUpdated": "2025-03-30"
+  },
+
+  "protectedDirectories": [
+    {
+      "path": "/Users/mymac/v8ui/tools",
+      "rule": "never_commit",
+      "message": "⚠️ /toolsディレクトリは絶対にGitHubにアップロードしないでください",
+      "severity": "critical"
+    },
+    {
+      "path": "/Users/mymac/v8ui/oscpack/build",
+      "rule": "can_commit",
+      "message": "oscpackのビルド成果物は必要に応じてコミット可能です",
+      "severity": "info"
+    }
+  ],
+
+  "gitRules": {
+    "pullRequest": {
+      "useToolOnly": true,
+      "toolPath": "/Users/mymac/v8ui/tools/create_pr.py,
+      "warningMessage": "プルリクエストは必ず専用ツールを使用して作成してください。トークンは.envにある"
+    },
+    "branch": {
+      "namingConvention": "feature/issue-{number}-{description}",
+      "examples": ["feature/issue-13-osc-migration", "feature/issue-17-osc-bridge-naming"],
+      "numberReference": "branchの{number}はGitHubの#番号ではなく、Issue名の番号を使用すること"
+    },
+    "issues": {
+      "titleFormat": "タイトルは「Issue XX: 内容」の形式にすること（「Issue XX:」がプレフィックス）",
+      "numberingRule": "XXは独自の連番で、GitHubの自動採番（#番号）とは異なる",
+      "nextNumber": "次に使用するIssue番号は、既存のIssueタイトルの中で最大の番号+1",
+      "branchReference": "feature/issue-XX-... のブランチ名はIssueタイトル内のXX番号を使用すること",
+      "github説明": "GitHubは自動的に#番号（例：#54）を割り当てるが、これはブランチ名やコミットメッセージでは使用しない",
+      "requiredSections": ["概要", "詳細", "再現手順", "解決案"],
+      "priorityLabels": ["優先度:最高", "優先度:高", "優先度:中", "優先度:低"],
+      "categories": [
+        {
+          "name": "OSCブリッジ",
+          "description": "OSC Bridgeの実装に関する問題",
+          "label": "OSCブリッジ"
+        },
+        {
+          "name": "テスト",
+          "description": "テスト実装や検証に関する問題",
+          "label": "テスト"
+        },
+        {
+          "name": "ドキュメント",
+          "description": "ドキュメントやサンプルに関する問題",
+          "label": "ドキュメント"
+        }
+      ],
+      "templateRules": [
+        "問題点を明確に記述すること",
+        "必要に応じてコードスニペットや図を含めること",
+        "再現手順は具体的かつ詳細に記述すること",
+        "解決案は複数の選択肢がある場合それぞれ記述すること"
+      ]
+    }
+  },
+
+  "m4lSettings": {
+    "compatibleMaxVersions": ["8.0.2", "8.1.0", "8.2.0"],
+    "dynamicPortRange": [49152, 65535],
+    "testEnvironment": {
+      "requireLiveRestart": true,
+      "testInDevMode": true
+    }
+  },
+
+  "buildRules": {
+    "preCommitTest": true,
+    "requiredCoverage": 80,
+    "buildCommands": [
+      {
+        "name": "oscpackユニバーサルバイナリビルド",
+        "command": "cd /Users/mymac/v8ui/oscpack && ./build_universal.sh",
+        "description": "x86_64とarm64の両方のアーキテクチャをサポートするoscpackライブラリをビルド"
+      },
+      {
+        "name": "OSC Bridgeプロジェクト設定",
+        "command": "cd /Users/mymac/v8ui/src/min-devkit/osc_bridge && cmake -S . -B build",
+        "description": "CMakeプロジェクトの初期設定（初回または設定変更時のみ必要）"
+      },
+      {
+        "name": "OSC Bridgeビルド",
+        "command": "cd /Users/mymac/v8ui/src/min-devkit/osc_bridge && cmake --build build",
+        "description": "OSC Bridgeのビルド実行"
+      }
+    ],
+    "artifactDirectories": [
+      {
+        "path": "/Users/mymac/v8ui/externals/osc_bridge.mxo",
+        "description": "OSC Bridgeの実行可能な成果物（Max外部オブジェクト）"
+      }
+    ]
+  },
+
+  "codeStandards": {
+    "minDevKitRules": [
+      "各ソースファイルは単一のMin外部オブジェクトに対応させる",
+      "Min-DevKitのヘッダーを複数のソースファイルでインクルードすると重複シンボルエラーが発生するため注意"
+    ],
+    "oscBridgeSpecific": [
+      "oscpackのライブラリパスは常に相対パスで指定する",
+      "M4L環境では動的ポート割り当てを使用して衝突を避ける",
+      "Issue 18ではarm64とx86_64の両方のアーキテクチャをサポートするユニバーサルバイナリを実装する必要がある"
+    ]
+  }
+}

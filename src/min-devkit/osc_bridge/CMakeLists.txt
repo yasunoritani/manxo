@@ -6,7 +6,24 @@ project(osc_bridge)
 
 # Min-APIパスの設定
 if (NOT DEFINED C74_MIN_API_DIR)
+    # GitHubからクローンしたmin-devリポジトリを使用するが、相対パスで参照
     set(C74_MIN_API_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../min-dev/min-devkit/source/min-api")
+    
+    if(NOT EXISTS "${C74_MIN_API_DIR}")
+        message(WARNING "Min-API not found at relative path: ${C74_MIN_API_DIR}")
+        message(STATUS "Trying alternative relative paths...")
+        
+        # 代替パスを試す
+        set(ALT_MIN_API_DIR "${CMAKE_SOURCE_DIR}/min-dev/min-devkit/source/min-api")
+        if(EXISTS "${ALT_MIN_API_DIR}")
+            set(C74_MIN_API_DIR "${ALT_MIN_API_DIR}")
+            message(STATUS "Found Min-API at: ${C74_MIN_API_DIR}")
+        else()
+            message(FATAL_ERROR "Min-API not found in any expected location. Please set C74_MIN_API_DIR manually.")
+        endif()
+    else()
+        message(STATUS "Using Min-API from relative path: ${C74_MIN_API_DIR}")
+    endif()
 endif()
 
 # Min-DevKitの構成スクリプトをインクルード
@@ -26,6 +43,16 @@ include_directories(
 # Min-DevKitヘッダー(c74_min.h)は各ソースファイルで一度だけインクルードされる必要がある
 set(SOURCE_FILES
 	osc_bridge.cpp
+)
+
+# Issue 21: M4L環境でのテストファイル
+set(TEST_FILES
+	error_recovery_test.cpp
+	extended_types_test.cpp
+	new_test_snippet.cpp
+	m4l_lifecycle_test.cpp
+	multi_instance_test.cpp
+	performance_test.cpp
 )
 
 # ライブラリの定義
@@ -119,3 +146,43 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 
 # Min-DevKitの後処理スクリプトを実行
 include(${C74_MIN_API_DIR}/script/min-posttarget.cmake)
+
+#############################################################
+# M4L環境テスト（Issue 21）
+#############################################################
+
+# テストオプションの設定（デフォルトでは無効）
+option(BUILD_OSC_BRIDGE_TESTS "Build OSC Bridge test suite" OFF)
+
+if(BUILD_OSC_BRIDGE_TESTS)
+    # 各テストファイルごとにテストターゲットを作成
+    foreach(TEST_FILE ${TEST_FILES})
+        # ファイル名からターゲット名を生成
+        get_filename_component(TEST_NAME ${TEST_FILE} NAME_WE)
+        set(TEST_TARGET "test_${TEST_NAME}")
+        
+        # テストターゲットの追加
+        add_executable(${TEST_TARGET} ${TEST_FILE})
+        
+        # テストに必要なライブラリをリンク
+        target_link_libraries(${TEST_TARGET} PUBLIC ${OSCPACK_LIB})
+        
+        # テスト固有の設定
+        target_compile_definitions(${TEST_TARGET} PRIVATE
+            MCP_OSC_TEST
+            _CRT_SECURE_NO_WARNINGS
+            NOMINMAX
+        )
+        
+        # テスト出力ディレクトリの設定
+        set_target_properties(${TEST_TARGET} PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests"
+        )
+        
+        message(STATUS "Configured test target: ${TEST_TARGET}")
+    endforeach()
+    
+    message(STATUS "OSC Bridge tests enabled. Use -DBUILD_OSC_BRIDGE_TESTS=OFF to disable.")
+else()
+    message(STATUS "OSC Bridge tests disabled. Use -DBUILD_OSC_BRIDGE_TESTS=ON to enable.")
+endif()

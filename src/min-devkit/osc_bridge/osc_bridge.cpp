@@ -696,19 +696,48 @@ public:
 
     // コンストラクタ
     osc_bridge(const atoms& args = {}) {
+        // Issue 20: 非常に目立つデバッグ情報を追加
+        cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
+        cout << "!!!!! OSC BRIDGE コンストラクタ開始 !!!!!" << endl;
+        cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
+        error_out.send("osc_bridge_init_start");
+        
         // 初期化は遅延させてMaxの初期化が完了してから行う
         // 引数の処理
         if (!args.empty()) {
             if (args.size() >= 1) {
                 host = args[0];
+                cout << "Debug: ホスト設定: " << static_cast<string>(host.get()) << endl;
             }
             if (args.size() >= 2) {
                 port_in = args[1];
+                cout << "Debug: 受信ポート設定: " << port_in << endl;
             }
             if (args.size() >= 3) {
                 port_out = args[2];
+                cout << "Debug: 送信ポート設定: " << port_out << endl;
             }
         }
+        
+        // 属性の初期値を表示
+        cout << "Debug: 初期設定 - host: " << static_cast<string>(host.get()) << ", port_in: " << port_in 
+             << ", port_out: " << port_out << ", dynamic_ports: " << (dynamic_ports ? "true" : "false") << endl;
+        
+        // 初期化処理を遅延させる
+        cout << "Debug: 初期化を遅延キューに追加" << endl;
+        
+        // Min-DevKitの遅延処理メカニズムを使用
+        // 遅延タスクを登録
+        deferred_tasks.push_back([this]{
+            cout << "Debug: 遅延初期化処理開始" << endl;
+            init_client_server(); 
+            cout << "Debug: 遅延初期化処理完了" << endl;
+        });
+        
+        // キューの処理をトリガー
+        task_queue.set();
+        
+        cout << "Debug: osc_bridge コンストラクタ完了" << endl;
     }
     
     // デストラクタ
@@ -717,28 +746,20 @@ public:
         disconnect_client_server();
     }
     
-    // 接続メッセージ
+    // 接続メッセージ - Issue 20: 超シンプル化版
     message<> m_connect { this, "connect", "Connect to OSC server",
         MIN_FUNCTION {
-            // 現在の設定を反映
-            update_connection_config();
+            // 超シンプルな出力のみにしてテスト
+            cout << "===== メッセージ受信確認: CONNECT =====" << endl;
             
-            // 接続を開始
-            bool success = connect_client_server();
+            // メッセージを出力ポートへ送信
+            output.send("connect_received");
             
-            // 接続状態を更新
-            connected = success;
+            // エラーポートにもテストメッセージを送信
+            error_out.send("connect_test");
             
-            // クライアント、サーバーの接続状態を出力
-            cout << "Client: " << (client_ ? "initialized" : "not initialized") << endl;
-            cout << "Server: " << (server_ ? "initialized" : "not initialized") << endl;
-            
-            // 結果を出力
-            if (success) {
-                cout << "Connected to OSC server: " << host.get() << " in:" << port_in << " out:" << port_out << endl;
-            } else {
-                error_out.send("connect_failed");
-            }
+            // 完了の出力
+            cout << "===== CONNECTメッセージ処理完了 =====" << endl;
             
             return {};
         }
@@ -747,13 +768,41 @@ public:
     // 切断メッセージ
     message<> m_disconnect { this, "disconnect", "Disconnect from OSC server",
         MIN_FUNCTION {
-            // 接続を閉じる
-            disconnect_client_server();
+            // Issue 20: デバッグ情報と安全なエラーハンドリングを追加
+            cout << "Debug: disconnect メッセージ受信" << endl;
             
-            // 接続状態を更新
-            connected = false;
-            
-            cout << "Disconnected from OSC server" << endl;
+            try {
+                // オブジェクトの状態を確認
+                cout << "Debug: 切断前の状態 - client_: " << (client_ ? "初期化済み" : "null") 
+                     << ", server_: " << (server_ ? "初期化済み" : "null")
+                     << ", connected: " << (connected ? "true" : "false") << endl;
+                
+                // 接続を閉じる
+                cout << "Debug: disconnect_client_server() 呼び出し" << endl;
+                disconnect_client_server();  // 独自のエラーハンドリング付き
+                cout << "Debug: disconnect_client_server() 完了" << endl;
+                
+                // 接続状態を確実に更新 (冗長だが安全のため)
+                connected = false;
+                cout << "Debug: connected属性をfalseに設定" << endl;
+                
+                // 特にクラッシュする場所を確認
+                cout << "Debug: 切断処理完了後の状態 - client_: " << (client_ ? "残存" : "nullまたはリセット済み") 
+                     << ", server_: " << (server_ ? "残存" : "nullまたはリセット済み")
+                     << ", connected: " << (connected ? "true" : "false") << endl;
+                
+                cout << "Debug: Disconnected from OSC server" << endl;
+            } catch (const std::exception& e) {
+                // 例外発生時は確実に接続状態を更新してエラーを報告
+                cout << "Debug: disconnectメッセージ処理中に例外発生: " << e.what() << endl;
+                connected = false;
+                error_out.send("disconnect_error", e.what());
+            } catch (...) {
+                // 不明な例外もキャッチ
+                cout << "Debug: disconnectメッセージ処理中に不明な例外発生" << endl;
+                connected = false;
+                error_out.send("disconnect_unknown_error");
+            }
             
             return {};
         }
@@ -762,14 +811,17 @@ public:
     // ステータスメッセージ
     message<> m_status { this, "status", "Report current status",
         MIN_FUNCTION {
+            // Issue 20: デバッグ情報を追加
+            cout << "Debug: status メッセージ受信" << endl;
+            
             // 現在の状態を出力
-            cout << "OSC Bridge Status:" << endl;
-            cout << "Host: " << host.get() << endl;
-            cout << "Port In: " << port_in << endl;
-            cout << "Port Out: " << port_out << endl;
-            cout << "Connected: " << (connected ? "yes" : "no") << endl;
-            cout << "Client: " << (client_ ? "initialized" : "not initialized") << endl;
-            cout << "Server: " << (server_ ? "initialized" : "not initialized") << endl;
+            cout << "Debug: OSC Bridge Status:" << endl;
+            cout << "Debug: Host: " << host.get() << endl;
+            cout << "Debug: Port In: " << port_in << endl;
+            cout << "Debug: Port Out: " << port_out << endl;
+            cout << "Debug: Connected: " << (connected ? "yes" : "no") << endl;
+            cout << "Debug: Client: " << (client_ ? "initialized" : "not initialized") << endl;
+            cout << "Debug: Server: " << (server_ ? "initialized" : "not initialized") << endl;
             cout << "Mappings: " << osc_mappings_.size() << endl;
             
             // いくつかのマッピングを表示
@@ -790,17 +842,24 @@ public:
     // マッピング登録メッセージ
     message<> m_map { this, "map", "Register OSC address pattern mapping",
         MIN_FUNCTION {
+            // Issue 20: デバッグ情報を追加
+            cout << "Debug: map メッセージ受信 - 引数数: " << args.size() << endl;
+            
             if (args.size() < 2) {
+                cout << "Debug: 引数不足 - error_out.send(\"invalid_mapping\")呼び出し" << endl;
                 error_out.send("invalid_mapping", "Need pattern and callback");
                 return {};
             }
             
             std::string pattern = args[0];
             std::string callback = args[1];
+            cout << "Debug: マッピング設定 - pattern: " << pattern << ", callback: " << callback << endl;
             
+            cout << "Debug: map_address() 呼び出し" << endl;
             if (map_address(pattern, callback)) {
-                cout << "Mapped OSC pattern: " << pattern << " -> " << callback << endl;
+                cout << "Debug: マッピング成功 - OSC pattern: " << pattern << " -> " << callback << endl;
             } else {
+                cout << "Debug: マッピング失敗 - error_out.send(\"mapping_failed\")呼び出し" << endl;
                 error_out.send("mapping_failed", pattern);
             }
             
@@ -811,14 +870,27 @@ public:
     // OSCメッセージ送信
     message<> m_anything { this, "anything", "Send OSC message",
         MIN_FUNCTION {
+            // Issue 20: デバッグ情報を追加
+            cout << "Debug: anything メッセージ受信 - 引数数: " << args.size() << endl;
+            if (args.size() > 0) {
+                cout << "Debug: 最初の引数: " << string(args[0]) << endl;
+            }
+            
             // 接続状態を確認
+            cout << "Debug: 接続状態の確認 - connected: " << (connected ? "true" : "false") << ", client_: " << (client_ ? "存在する" : "存在しない") << endl;
             if (!connected || !client_) {
+                cout << "Debug: 接続されていないかクライアントが初期化されていないため、自動再接続を試みる" << endl;
+                
                 // 自動再接続を試みる
+                cout << "Debug: update_connection_config() 呼び出し" << endl;
                 update_connection_config();
+                cout << "Debug: connect_client_server() 呼び出し" << endl;
                 bool success = connect_client_server();
                 connected = success;
+                cout << "Debug: 自動再接続結果: " << (success ? "成功" : "失敗") << endl;
                 
                 if (!connected || !client_) {
+                    cout << "Debug: 再接続失敗 - error_out.send(\"not_connected\")呼び出し" << endl;
                     error_out.send("not_connected");
                     return {};
                 }
@@ -826,18 +898,25 @@ public:
             
             // 最初の引数をアドレスとして使用
             symbol address = args[0];
+            cout << "Debug: 送信アドレス: " << string(address) << endl;
             
             // 残りの引数をOSCメッセージの引数として使用
             atoms message_args;
             if (args.size() > 1) {
                 message_args = atoms(args.begin() + 1, args.end());
+                cout << "Debug: 送信引数数: " << message_args.size() << endl;
+            } else {
+                cout << "Debug: 送信引数なし" << endl;
             }
             
             // メッセージを送信
+            cout << "Debug: client_->send() 呼び出し" << endl;
             bool success = client_->send(address, message_args);
+            cout << "Debug: 送信結果: " << (success ? "成功" : "失敗") << endl;
             
             // 送信失敗時はエラーを報告
             if (!success) {
+                cout << "Debug: 送信失敗 - error_out.send(\"send_failed\")呼び出し" << endl;
                 error_out.send("send_failed", address);
             }
             
@@ -985,15 +1064,48 @@ private:
     
     // 接続切断
     void disconnect_client_server() {
-        if (client_) {
-            client_->disconnect();
+        // Issue 20: クラッシュ防止のためのエラーハンドリング追加
+        try {
+            cout << "Debug: disconnect_client_server()内 - client_の切断処理開始" << endl;
+            if (client_) {
+                client_->disconnect();
+                cout << "Debug: client_->disconnect()完了" << endl;
+            } else {
+                cout << "Debug: client_はnull" << endl;
+            }
+            
+            cout << "Debug: disconnect_client_server()内 - server_の停止処理開始" << endl;
+            if (server_) {
+                // 万が一の場合のクラッシュ回避メカニズム
+                // M4L環境での問題を回避するため、複数のステップに分ける
+                try {
+                    server_->stop();
+                    cout << "Debug: server_->stop()完了" << endl;
+                } catch (const std::exception& e) {
+                    // サーバー停止時の例外をキャッチ
+                    cout << "Debug: server_->stop()で例外発生: " << e.what() << endl;
+                    error_out.send("server_stop_error", e.what());
+                }
+            } else {
+                cout << "Debug: server_はnull" << endl;
+            }
+            
+            // 万が一の場合に備えて、メモリ参照前にチェック
+            cout << "Debug: 接続状態をfalseに設定" << endl;
+            connected = false;
+            
+            cout << "Debug: disconnect_client_server()処理完了" << endl;
+        } catch (const std::exception& e) {
+            // 例外発生時も確実に接続状態を更新
+            cout << "Debug: disconnect_client_server()で例外発生: " << e.what() << endl;
+            connected = false;
+            error_out.send("disconnect_error", e.what());
+        } catch (...) {
+            // 不明な例外もキャッチ
+            cout << "Debug: disconnect_client_server()で不明な例外発生" << endl;
+            connected = false;
+            error_out.send("disconnect_unknown_error");
         }
-        
-        if (server_) {
-            server_->stop();
-        }
-        
-        connected = false;
     }
     
     // OSCメッセージ処理 - Min-DevKit型バージョン
@@ -1189,7 +1301,8 @@ private:
 };
 
 // Min外部オブジェクトをクラスから生成
-MIN_EXTERNAL(osc_bridge);
-
 } // namespace osc
 } // namespace mcp
+
+// 名前空間の外でMIN_EXTERNALを呼び出す必要があります
+MIN_EXTERNAL(mcp::osc::osc_bridge);

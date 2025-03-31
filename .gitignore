@@ -1,0 +1,32 @@
+# 環境設定ファイル
+.env
+.env.local
+.env.*.local
+
+# ビルド成果物
+build/
+dist/
+*.mxo
+
+# 依存関係
+node_modules/
+
+# エディタ関連
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS固有ファイル
+.DS_Store
+Thumbs.db
+
+# ログ
+*.log
+npm-debug.log*
+
+# ツールディレクトリは絶対に除外（プロジェクトルールにより）
+/tools/
+# 以下の行は不要ですが参考として残しておきます
+# tools/secure/
+# tools/private/
