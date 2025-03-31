@@ -3,7 +3,12 @@
 ///	@copyright	Copyright 2025 The Max 9-Claude Desktop Integration Project. All rights reserved.
 ///	@license	Use of this source code is governed by the MIT License found in the License.md file.
 
+// Issue 19: Min-DevKitヘッダーの重複インクルード対応
+// Min-DevKitの設計思想に従い、単一ファイル内に実装を完結
+// Min-DevKitヘッダーは各ソースファイルで一度だけインクルード
 #include "c74_min.h"
+
+// 標準ライブラリ
 #include <string>
 #include <memory>
 #include <atomic>
@@ -13,6 +18,7 @@
 #include <thread>
 #include <map>
 #include <sstream>
+#include <random>
 
 // OSCpack includes
 #include "ip/UdpSocket.h"
@@ -20,153 +26,254 @@
 #include "osc/OscReceivedElements.h"
 #include "osc/OscPacketListener.h"
 
-// Local includes
-#include "mcp.osc_types.hpp"
+// Issue 19: 独自のラッパーヘッダー
+#include "max_wrapper.hpp"
 
+// Min-DevKitの名前空間を使用
 using namespace c74::min;
 
-// OSC名前空間
+// OSC関連の独自型定義とユーティリティ
 namespace mcp {
 namespace osc {
 
-// 前方宣言
-class client;
-class server;
-class handler_registry;
-class packet_listener;
-class claude_handler;
+// OSC独自型定義
+using osc_value = std::string;  // 演算のための簡略型
+ using osc_args = std::vector<osc_value>;
 
-// メッセージハンドラーの型定義
-typedef std::function<void(const std::string&, const atoms&)> message_handler_t;
-typedef std::function<void(const std::string&)> error_handler_t;
+/**
+ * OSC接続設定
+ */
+struct connection_config {
+    std::string host = "127.0.0.1";  // ホスト名/IPアドレス
+    int port_in = 7500;              // 受信ポート
+    int port_out = 7400;             // 送信ポート
+    int buffer_size = 4096;          // バッファサイズ
+    bool dynamic_ports = true;       // M4L向け動的ポート割り当て
+    bool low_latency = false;        // 低レイテンシモード（CPU負荷が増加）
+    bool m4l_compatibility = true;   // Max for Live互換モード
+};
+
+/**
+ * 接続状態
+ */
+enum class connection_state {
+    disconnected,        // 未接続
+    connecting,          // 接続中
+    connected,           // 接続済み
+    error                // エラー状態
+};
+
+/**
+ * エラーコード
+ */
+enum class osc_error_code {
+    none,                // エラーなし
+    connection_failed,   // 接続失敗
+    send_failed,         // 送信失敗
+    receive_failed,      // 受信失敗
+    invalid_address,     // 無効なアドレス
+    invalid_args,        // 無効な引数
+    timeout,             // タイムアウト
+    unknown_error        // 不明なエラー
+};
+
+/**
+ * エラー情報
+ */
+struct error_info {
+    osc_error_code code = osc_error_code::none;
+    std::string message;
+    
+    // エラーがあるかどうか
+    bool has_error() const {
+        return code != osc_error_code::none;
+    }
+};
+
+/**
+ * OSCメッセージハンドラの型定義
+ */
+using message_handler = std::function<void(const std::string& address, const osc_args& args)>;
+
+/**
+ * エラーハンドラの型定義
+ */
+using error_handler = std::function<void(const error_info& error)>;
+
+// Min-DevKit型とOSC独自型の変換関数
+
+/**
+ * OSC独自型（osc_args）からMin-DevKit型（atoms）への変換
+ */
+inline atoms convert_to_atoms(const osc_args& args) {
+    atoms result;
+    for (const auto& arg : args) {
+        // 型ごとの適切な変換を実装
+        // 実装簡略化のため、現在は文字列として扱う
+        result.push_back(symbol(arg));
+    }
+    return result;
+}
+
+/**
+ * Min-DevKit型（atoms）からOSC独自型（osc_args）への変換
+ */
+inline osc_args convert_to_osc_args(const atoms& args) {
+    osc_args result;
+    for (const auto& arg : args) {
+        if (arg.type() == message_type::symbol_argument) {
+            std::string value = arg;
+            result.push_back(value);
+        } else if (arg.type() == message_type::float_argument) {
+            float value = arg;
+            result.push_back(std::to_string(value));
+        } else if (arg.type() == message_type::int_argument) {
+            int value = arg;
+            result.push_back(std::to_string(value));
+        } else {
+            // 他の型は空文字列として扱う
+            result.push_back("");
+        }
+    }
+    return result;
+}
+
+// Min-DevKitメッセージハンドラ用アダプタ
+
+/**
+ * OSC独自型向けメッセージハンドラをMin-DevKit型のハンドラとして使用するアダプタ
+ */
+class message_adapter {
+public:
+    message_adapter(message_handler handler) : handler_(handler) {}
+    
+    // Min-DevKitからの呼び出し用インターフェース
+    void operator()(const std::string& address, const atoms& args) {
+        handler_(address, convert_to_osc_args(args));
+    }
+    
+    // OSC独自型からの吹き出し用インターフェース
+    void invoke_with_osc_args(const std::string& address, const osc_args& args) {
+        handler_(address, args);
+    }
+    
+private:
+    message_handler handler_;
+};
+
+/**
+ * ハンドラーレジストリクラス - OSCアドレスパターンとハンドラーの関連付けを管理
+ */
+class handler_registry {
+public:
+    // パターンとハンドラーの登録
+    void register_handler(const std::string& pattern, message_handler handler) {
+        handlers_[pattern] = handler;
+    }
+    
+    // パターンに一致するハンドラーを検索
+    message_handler find_handler(const std::string& address) const {
+        // 完全一致の検索
+        auto it = handlers_.find(address);
+        if (it != handlers_.end()) {
+            return it->second;
+        }
+        
+        // 将来的にはOSCパターンマッチング（ワイルドカード等）を実装
+        // 現在は完全一致のみサポート
+        
+        return nullptr; // 一致するハンドラーなし
+    }
+    
+    // 登録されているハンドラーの数を取得
+    size_t size() const {
+        return handlers_.size();
+    }
+    
+    // イテレーター処理のサポート
+    auto begin() const { return handlers_.begin(); }
+    auto end() const { return handlers_.end(); }
+    
+private:
+    // パターンとハンドラーのマップ
+    std::map<std::string, message_handler> handlers_;
+};
 
 // OSCパケットリスナークラス - oscpackを拡張
 class packet_listener : public ::osc::OscPacketListener {
 public:
     packet_listener() = default;
     
-    void set_message_callback(message_handler_t handler) {
+    void set_message_callback(message_handler handler) {
         message_callback_ = handler;
     }
     
-    void set_error_callback(error_handler_t handler) {
+    void set_error_callback(std::function<void(const error_info&)> handler) {
         error_callback_ = handler;
     }
     
     // 受信パケットの処理
+    // Issue 19: OSC独自型(osc_args)を使用するように変更
     virtual void ProcessMessage(const ::osc::ReceivedMessage& message, 
                               const IpEndpointName& remote_endpoint) override {
         try {
             // アドレスパターンを取得
             std::string address = message.AddressPattern();
             
-            // 引数をatomsオブジェクトに変換
-            atoms args;
+            // 引数をOSC独自型のosc_argsオブジェクトに変換
+            osc_args osc_arguments;
             
             // 引数のイテレーション
             for (::osc::ReceivedMessage::const_iterator arg = message.ArgumentsBegin();
                  arg != message.ArgumentsEnd(); ++arg) {
                 if (arg->IsFloat()) {
-                    args.push_back(static_cast<float>(arg->AsFloat()));
+                    osc_arguments.push_back(std::to_string(arg->AsFloat()));
                 }
                 else if (arg->IsDouble()) {
-                    args.push_back(static_cast<float>(arg->AsDouble()));
+                    osc_arguments.push_back(std::to_string(arg->AsDouble()));
                 }
                 else if (arg->IsInt32()) {
-                    args.push_back(static_cast<int>(arg->AsInt32()));
+                    osc_arguments.push_back(std::to_string(arg->AsInt32()));
                 }
                 else if (arg->IsInt64()) {
-                    args.push_back(static_cast<int>(arg->AsInt64()));
+                    osc_arguments.push_back(std::to_string(arg->AsInt64()));
                 }
                 else if (arg->IsString()) {
-                    args.push_back(symbol(arg->AsString()));
+                    osc_arguments.push_back(arg->AsString());
                 }
                 else if (arg->IsBool()) {
-                    args.push_back(arg->AsBool() ? 1 : 0);
+                    osc_arguments.push_back(arg->AsBool() ? "true" : "false");
                 }
                 // 他の型は必要に応じて追加
             }
             
             // コールバックを呼び出す
             if (message_callback_) {
-                message_callback_(address, args);
+                // OSC独自型を使用してコールバックを呼び出す
+                message_callback_(address, osc_arguments);
             }
         }
         catch (::osc::Exception& e) {
             if (error_callback_) {
-                error_callback_(std::string("Error parsing OSC message: ") + e.what());
+                error_info err;
+                err.code = osc_error_code::receive_failed;
+                err.message = std::string("Error parsing OSC message: ") + e.what();
+                error_callback_(err);
             }
         }
         catch (const std::exception& e) {
             if (error_callback_) {
-                error_callback_(std::string("Unknown error processing OSC message: ") + e.what());
+                error_info err;
+                err.code = osc_error_code::unknown_error;
+                err.message = std::string("Unknown error processing OSC message: ") + e.what();
+                error_callback_(err);
             }
         }
     }
     
 private:
-    message_handler_t message_callback_;
-    error_handler_t error_callback_;
-};
-
-// ハンドラーレジストリクラス - 特定のOSCアドレスとハンドラーを関連付ける
-class handler_registry {
-public:
-    handler_registry() = default;
-    
-    // ハンドラーを登録
-    void register_handler(const std::string& pattern, message_handler_t handler) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        handlers_[pattern] = handler;
-    }
-    
-    // ハンドラーを削除
-    void unregister_handler(const std::string& pattern) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        handlers_.erase(pattern);
-    }
-    
-    // アドレスパターンにマッチするハンドラーを探す
-    bool dispatch_message(const std::string& address, const atoms& args) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        
-        // アドレスと完全一致するハンドラーを探す
-        auto it = handlers_.find(address);
-        if (it != handlers_.end()) {
-            it->second(address, args);
-            return true;
-        }
-        
-        // ワイルドカードマッチを実装する場合はここにコードを追加
-        
-        return false;
-    }
-    
-    // 登録されているハンドラーの数を取得
-    size_t count() const {
-        std::lock_guard<std::mutex> lock(mutex_);
-        return handlers_.size();
-    }
-    
-    // 全てのハンドラーをクリア
-    void clear() {
-        std::lock_guard<std::mutex> lock(mutex_);
-        handlers_.clear();
-    }
-    
-    // 特定のパターンに対応するハンドラーを取得
-    message_handler_t get_handler(const std::string& pattern) {
-        std::lock_guard<std::mutex> lock(mutex_);
-        auto it = handlers_.find(pattern);
-        if (it != handlers_.end()) {
-            return it->second;
-        }
-        return nullptr;
-    }
-    
-private:
-    std::map<std::string, message_handler_t> handlers_;
-    mutable std::mutex mutex_; // スレッドセーフな操作のため
+    message_handler message_callback_;
+    std::function<void(const error_info&)> error_callback_;
 };
 
 // OSCクライアントクラス - OSCメッセージを送信する
@@ -215,8 +322,20 @@ public:
         }
     }
     
-    // OSCメッセージ送信
+    // OSCメッセージ送信 - Min-DevKit型を使用するバージョン
+    // Issue 19: Min-DevKit依存を最小化するためMin-DevKit型とOSC独自型の両方をサポート
     bool send(const std::string& address, const atoms& args) {
+        // 独自型に変換して内部関数を呼び出す
+        return send_internal(address, convert_to_osc_args(args));
+    }
+    
+    // OSCメッセージ送信 - OSC独自型を使用するバージョン
+    bool send_osc(const std::string& address, const osc_args& args) {
+        return send_internal(address, args);
+    }
+    
+    // 内部実装 - OSC独自型のみを使用
+    bool send_internal(const std::string& address, const osc_args& args) {
         if (!socket_) {
             return false;
         }
@@ -230,22 +349,10 @@ public:
             packet << ::osc::BeginMessage(address.c_str());
             
             // 引数の追加
-            for (size_t i = 0; i < args.size(); ++i) {
-                const auto& arg = args[i];
-                
-                if (arg.type() == message_type::float_argument) {
-                    float value = arg;
-                    packet << value;
-                }
-                else if (arg.type() == message_type::int_argument) {
-                    int value = arg;
-                    packet << value;
-                }
-                else if (arg.type() == message_type::symbol_argument) {
-                    std::string value = arg;
-                    packet << value.c_str();
-                }
-                // 他の型は必要に応じて追加
+            for (const auto& arg : args) {
+                // 現在はosc_valueは全て文字列として処理
+                // 実际の実装ではデータ型を解析し適切な型で送信する必要がある
+                packet << arg.c_str();
             }
             
             // パケットの構築終了
@@ -279,12 +386,12 @@ public:
     }
     
     // メッセージコールバック設定
-    void set_message_callback(message_handler_t callback) {
+    void set_message_callback(message_handler callback) {
         listener_.set_message_callback(callback);
     }
     
     // エラーコールバック設定
-    void set_error_callback(error_handler_t callback) {
+    void set_error_callback(std::function<void(const error_info&)> callback) {
         listener_.set_error_callback(callback);
     }
     
@@ -341,9 +448,10 @@ public:
                 }
                 catch (const std::exception& e) {
                     // エラーコールバックが設定されていれば通知
-                    std::string error_msg = "OSC receive thread error: ";
-                    error_msg += e.what();
-                    listener_.set_error_callback(error_msg);
+                    error_info err;
+                    err.code = osc_error_code::receive_failed;
+                    err.message = std::string("OSC receive thread error: ") + e.what();
+                    error_callback_(err);
                 }
             });
             
@@ -382,7 +490,7 @@ public:
     }
     
     // アドレスとハンドラの関連付けを追加
-    void add_handler(const std::string& pattern, message_handler_t handler) {
+    void add_handler(const std::string& pattern, message_handler handler) {
         registry_.register_handler(pattern, handler);
     }
     
@@ -394,30 +502,49 @@ private:
     bool running_;
     bool low_latency_;
     handler_registry registry_;
+    
+    void error_callback_(const error_info& error) {
+        // 空の実装、サーバークラスで使用される場合は別途設定される
+    }
 };
 
 // Claude Desktopハンドラークラス
 class claude_handler {
 public:
-    claude_handler(outlet& output, outlet& error) 
-        : output_(output), error_out_(error) {}
+    claude_handler(outlet<>& output, outlet<>& error_out) 
+        : output_(output), error_out_(error_out) {}
     
+    // Issue 19: Min-DevKit型を使用するためのインターフェース
     void process_message(const std::string& address, const atoms& args) {
+        // Min-DevKit型からOSC独自型に変換
+        process_message_internal(address, convert_to_osc_args(args));
+    }
+    
+    // Issue 19: OSC独自型を使用するためのインターフェース
+    void process_message_osc(const std::string& address, const osc_args& args) {
+        process_message_internal(address, args);
+    }
+    
+    // 内部実装 - OSC独自型を使用
+    void process_message_internal(const std::string& address, const osc_args& args) {
         // Claude Desktopメッセージ特有の処理
         if (address == "/claude/message") {
-            handle_claude_message(args);
+            handle_claude_message_internal(args);
         }
         else if (address == "/claude/status") {
-            handle_claude_status(args);
+            handle_claude_status_internal(args);
         }
         else if (address == "/claude/error") {
-            handle_claude_error(args);
+            handle_claude_error_internal(args);
         }
         else {
             // 不明なメッセージはそのまま転送
             atoms out_args;
             out_args.push_back(symbol(address));
-            for (const auto& arg : args) {
+            
+            // OSC独自型からMin-DevKit型に変換
+            atoms converted_args = convert_to_atoms(args);
+            for (const auto& arg : converted_args) {
                 out_args.push_back(arg);
             }
             output_.send(out_args);
@@ -425,11 +552,19 @@ public:
     }
     
 private:
-    outlet& output_;
-    outlet& error_out_;
+    outlet<>& output_;
+    outlet<>& error_out_;
     
-    // Claudeからのメッセージ処理
+    // Issue 19: Min-DevKit型から独自型に変換するメソッドを追加
+    
+    // Claudeからのメッセージ処理 - Min-DevKit型バージョン
     void handle_claude_message(const atoms& args) {
+        // Min-DevKit型からOSC独自型に変換して内部処理を呼び出す
+        handle_claude_message_internal(convert_to_osc_args(args));
+    }
+    
+    // Claudeからのメッセージ処理 - OSC独自型バージョン
+    void handle_claude_message_internal(const osc_args& args) {
         if (args.size() < 1) {
             error_out_.send("invalid_claude_message", "No message content");
             return;
@@ -439,16 +574,23 @@ private:
         atoms message_atoms;
         message_atoms.push_back(symbol("claude_message"));
         
-        // 全ての引数を追加
-        for (const auto& arg : args) {
+        // 全ての引数を追加（OSC独自型からMin-DevKit型に変換）
+        atoms converted_args = convert_to_atoms(args);
+        for (const auto& arg : converted_args) {
             message_atoms.push_back(arg);
         }
         
         output_.send(message_atoms);
     }
     
-    // Claudeの状態変更処理
+    // Claudeの状態変更処理 - Min-DevKit型バージョン
     void handle_claude_status(const atoms& args) {
+        // Min-DevKit型からOSC独自型に変換して内部処理を呼び出す
+        handle_claude_status_internal(convert_to_osc_args(args));
+    }
+    
+    // Claudeの状態変更処理 - OSC独自型バージョン
+    void handle_claude_status_internal(const osc_args& args) {
         if (args.size() < 1) {
             error_out_.send("invalid_claude_status", "No status information");
             return;
@@ -458,16 +600,23 @@ private:
         atoms status_atoms;
         status_atoms.push_back(symbol("claude_status"));
         
-        // 全ての引数を追加
-        for (const auto& arg : args) {
+        // 全ての引数を追加（OSC独自型からMin-DevKit型に変換）
+        atoms converted_args = convert_to_atoms(args);
+        for (const auto& arg : converted_args) {
             status_atoms.push_back(arg);
         }
         
         output_.send(status_atoms);
     }
     
-    // Claudeのエラー処理
+    // Claudeのエラー処理 - Min-DevKit型バージョン
     void handle_claude_error(const atoms& args) {
+        // Min-DevKit型からOSC独自型に変換して内部処理を呼び出す
+        handle_claude_error_internal(convert_to_osc_args(args));
+    }
+    
+    // Claudeのエラー処理 - OSC独自型バージョン
+    void handle_claude_error_internal(const osc_args& args) {
         if (args.size() < 1) {
             error_out_.send("invalid_claude_error", "No error information");
             return;
@@ -475,7 +624,7 @@ private:
         
         // エラー情報を出力
         std::string error_type = "unknown_error";
-        if (args.size() > 0 && args[0].type() == message_type::symbol_argument) {
+        if (args.size() > 0) {
             error_type = args[0];
         }
         
@@ -483,7 +632,7 @@ private:
         if (args.size() > 1) {
             for (size_t i = 1; i < args.size(); ++i) {
                 if (i > 1) error_message += " ";
-                error_message += std::string(args[i]);
+                error_message += args[i];
             }
         }
         
@@ -547,20 +696,48 @@ public:
 
     // コンストラクタ
     osc_bridge(const atoms& args = {}) {
-        // 初期化は遅延させてMaxの初期化が完了してから行う
+        // Issue 20: 非常に目立つデバッグ情報を追加
+        cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
+        cout << "!!!!! OSC BRIDGE コンストラクタ開始 !!!!!" << endl;
+        cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << endl;
+        error_out.send("osc_bridge_init_start");
         
+        // 初期化は遅延させてMaxの初期化が完了してから行う
         // 引数の処理
         if (!args.empty()) {
             if (args.size() >= 1) {
                 host = args[0];
+                cout << "Debug: ホスト設定: " << static_cast<string>(host.get()) << endl;
             }
             if (args.size() >= 2) {
                 port_in = args[1];
+                cout << "Debug: 受信ポート設定: " << port_in << endl;
             }
             if (args.size() >= 3) {
                 port_out = args[2];
+                cout << "Debug: 送信ポート設定: " << port_out << endl;
             }
         }
+        
+        // 属性の初期値を表示
+        cout << "Debug: 初期設定 - host: " << static_cast<string>(host.get()) << ", port_in: " << port_in 
+             << ", port_out: " << port_out << ", dynamic_ports: " << (dynamic_ports ? "true" : "false") << endl;
+        
+        // 初期化処理を遅延させる
+        cout << "Debug: 初期化を遅延キューに追加" << endl;
+        
+        // Min-DevKitの遅延処理メカニズムを使用
+        // 遅延タスクを登録
+        deferred_tasks.push_back([this]{
+            cout << "Debug: 遅延初期化処理開始" << endl;
+            init_client_server(); 
+            cout << "Debug: 遅延初期化処理完了" << endl;
+        });
+        
+        // キューの処理をトリガー
+        task_queue.set();
+        
+        cout << "Debug: osc_bridge コンストラクタ完了" << endl;
     }
     
     // デストラクタ
@@ -569,59 +746,82 @@ public:
         disconnect_client_server();
     }
     
-    // 接続メッセージ
-    message<> connect { this, "connect", "Connect to OSC server",
+    // 接続メッセージ - Issue 20: 超シンプル化版
+    message<> m_connect { this, "connect", "Connect to OSC server",
         MIN_FUNCTION {
-            // 現在の設定を反映
-            update_connection_config();
+            // 超シンプルな出力のみにしてテスト
+            cout << "===== メッセージ受信確認: CONNECT =====" << endl;
             
-            // 接続を開始
-            bool success = connect_client_server();
+            // メッセージを出力ポートへ送信
+            output.send("connect_received");
             
-            // 接続状態を更新
-            connected = success;
+            // エラーポートにもテストメッセージを送信
+            error_out.send("connect_test");
             
-            // クライアント、サーバーの接続状態を出力
-            cout << "Client: " << (client_ ? "initialized" : "not initialized") << endl;
-            cout << "Server: " << (server_ ? "initialized" : "not initialized") << endl;
-            
-            // 結果を出力
-            if (success) {
-                cout << "Connected to OSC server: " << host.get() << " in:" << port_in << " out:" << port_out << endl;
-            } else {
-                error_out.send("connect_failed");
-            }
+            // 完了の出力
+            cout << "===== CONNECTメッセージ処理完了 =====" << endl;
             
             return {};
         }
     };
     
     // 切断メッセージ
-    message<> disconnect { this, "disconnect", "Disconnect from OSC server",
+    message<> m_disconnect { this, "disconnect", "Disconnect from OSC server",
         MIN_FUNCTION {
-            // 接続を閉じる
-            disconnect_client_server();
+            // Issue 20: デバッグ情報と安全なエラーハンドリングを追加
+            cout << "Debug: disconnect メッセージ受信" << endl;
             
-            // 接続状態を更新
-            connected = false;
-            
-            cout << "Disconnected from OSC server" << endl;
+            try {
+                // オブジェクトの状態を確認
+                cout << "Debug: 切断前の状態 - client_: " << (client_ ? "初期化済み" : "null") 
+                     << ", server_: " << (server_ ? "初期化済み" : "null")
+                     << ", connected: " << (connected ? "true" : "false") << endl;
+                
+                // 接続を閉じる
+                cout << "Debug: disconnect_client_server() 呼び出し" << endl;
+                disconnect_client_server();  // 独自のエラーハンドリング付き
+                cout << "Debug: disconnect_client_server() 完了" << endl;
+                
+                // 接続状態を確実に更新 (冗長だが安全のため)
+                connected = false;
+                cout << "Debug: connected属性をfalseに設定" << endl;
+                
+                // 特にクラッシュする場所を確認
+                cout << "Debug: 切断処理完了後の状態 - client_: " << (client_ ? "残存" : "nullまたはリセット済み") 
+                     << ", server_: " << (server_ ? "残存" : "nullまたはリセット済み")
+                     << ", connected: " << (connected ? "true" : "false") << endl;
+                
+                cout << "Debug: Disconnected from OSC server" << endl;
+            } catch (const std::exception& e) {
+                // 例外発生時は確実に接続状態を更新してエラーを報告
+                cout << "Debug: disconnectメッセージ処理中に例外発生: " << e.what() << endl;
+                connected = false;
+                error_out.send("disconnect_error", e.what());
+            } catch (...) {
+                // 不明な例外もキャッチ
+                cout << "Debug: disconnectメッセージ処理中に不明な例外発生" << endl;
+                connected = false;
+                error_out.send("disconnect_unknown_error");
+            }
             
             return {};
         }
     };
     
     // ステータスメッセージ
-    message<> status { this, "status", "Report current status",
+    message<> m_status { this, "status", "Report current status",
         MIN_FUNCTION {
+            // Issue 20: デバッグ情報を追加
+            cout << "Debug: status メッセージ受信" << endl;
+            
             // 現在の状態を出力
-            cout << "OSC Bridge Status:" << endl;
-            cout << "Host: " << host.get() << endl;
-            cout << "Port In: " << port_in << endl;
-            cout << "Port Out: " << port_out << endl;
-            cout << "Connected: " << (connected ? "yes" : "no") << endl;
-            cout << "Client: " << (client_ ? "initialized" : "not initialized") << endl;
-            cout << "Server: " << (server_ ? "initialized" : "not initialized") << endl;
+            cout << "Debug: OSC Bridge Status:" << endl;
+            cout << "Debug: Host: " << host.get() << endl;
+            cout << "Debug: Port In: " << port_in << endl;
+            cout << "Debug: Port Out: " << port_out << endl;
+            cout << "Debug: Connected: " << (connected ? "yes" : "no") << endl;
+            cout << "Debug: Client: " << (client_ ? "initialized" : "not initialized") << endl;
+            cout << "Debug: Server: " << (server_ ? "initialized" : "not initialized") << endl;
             cout << "Mappings: " << osc_mappings_.size() << endl;
             
             // いくつかのマッピングを表示
@@ -640,19 +840,26 @@ public:
     };
     
     // マッピング登録メッセージ
-    message<> map { this, "map", "Register OSC address pattern mapping",
+    message<> m_map { this, "map", "Register OSC address pattern mapping",
         MIN_FUNCTION {
+            // Issue 20: デバッグ情報を追加
+            cout << "Debug: map メッセージ受信 - 引数数: " << args.size() << endl;
+            
             if (args.size() < 2) {
+                cout << "Debug: 引数不足 - error_out.send(\"invalid_mapping\")呼び出し" << endl;
                 error_out.send("invalid_mapping", "Need pattern and callback");
                 return {};
             }
             
             std::string pattern = args[0];
             std::string callback = args[1];
+            cout << "Debug: マッピング設定 - pattern: " << pattern << ", callback: " << callback << endl;
             
+            cout << "Debug: map_address() 呼び出し" << endl;
             if (map_address(pattern, callback)) {
-                cout << "Mapped OSC pattern: " << pattern << " -> " << callback << endl;
+                cout << "Debug: マッピング成功 - OSC pattern: " << pattern << " -> " << callback << endl;
             } else {
+                cout << "Debug: マッピング失敗 - error_out.send(\"mapping_failed\")呼び出し" << endl;
                 error_out.send("mapping_failed", pattern);
             }
             
@@ -661,16 +868,29 @@ public:
     };
     
     // OSCメッセージ送信
-    message<> anything { this, "anything", "Send OSC message",
+    message<> m_anything { this, "anything", "Send OSC message",
         MIN_FUNCTION {
+            // Issue 20: デバッグ情報を追加
+            cout << "Debug: anything メッセージ受信 - 引数数: " << args.size() << endl;
+            if (args.size() > 0) {
+                cout << "Debug: 最初の引数: " << string(args[0]) << endl;
+            }
+            
             // 接続状態を確認
+            cout << "Debug: 接続状態の確認 - connected: " << (connected ? "true" : "false") << ", client_: " << (client_ ? "存在する" : "存在しない") << endl;
             if (!connected || !client_) {
+                cout << "Debug: 接続されていないかクライアントが初期化されていないため、自動再接続を試みる" << endl;
+                
                 // 自動再接続を試みる
+                cout << "Debug: update_connection_config() 呼び出し" << endl;
                 update_connection_config();
+                cout << "Debug: connect_client_server() 呼び出し" << endl;
                 bool success = connect_client_server();
                 connected = success;
+                cout << "Debug: 自動再接続結果: " << (success ? "成功" : "失敗") << endl;
                 
                 if (!connected || !client_) {
+                    cout << "Debug: 再接続失敗 - error_out.send(\"not_connected\")呼び出し" << endl;
                     error_out.send("not_connected");
                     return {};
                 }
@@ -678,18 +898,25 @@ public:
             
             // 最初の引数をアドレスとして使用
             symbol address = args[0];
+            cout << "Debug: 送信アドレス: " << string(address) << endl;
             
             // 残りの引数をOSCメッセージの引数として使用
             atoms message_args;
             if (args.size() > 1) {
                 message_args = atoms(args.begin() + 1, args.end());
+                cout << "Debug: 送信引数数: " << message_args.size() << endl;
+            } else {
+                cout << "Debug: 送信引数なし" << endl;
             }
             
             // メッセージを送信
+            cout << "Debug: client_->send() 呼び出し" << endl;
             bool success = client_->send(address, message_args);
+            cout << "Debug: 送信結果: " << (success ? "成功" : "失敗") << endl;
             
             // 送信失敗時はエラーを報告
             if (!success) {
+                cout << "Debug: 送信失敗 - error_out.send(\"send_failed\")呼び出し" << endl;
                 error_out.send("send_failed", address);
             }
             
@@ -698,13 +925,14 @@ public:
     };
     
     // 初期化完了時の処理
-    message<> maxclass_setup { this, "maxclass_setup",
+    message<> m_maxclass_setup { this, "maxclass_setup",
         MIN_FUNCTION {
             // M4L環境のライフサイクルイベントを登録
+            // Issue 19: max_object_t<osc_bridge>の代わりにmax_wrapper::を使用
             void* c = args[0];
             c74::max::class_addmethod(
                 (c74::max::t_class*)c,
-                (c74::max::method)handle_m4l_liveset_loaded_wrapper,
+                (c74::max::method)max_wrapper::handle_m4l_liveset_loaded_wrapper,
                 "liveset_loaded",
                 c74::max::A_CANT,
                 0
@@ -712,7 +940,7 @@ public:
             
             c74::max::class_addmethod(
                 (c74::max::t_class*)c,
-                (c74::max::method)handle_m4l_liveset_saved_wrapper,
+                (c74::max::method)max_wrapper::handle_m4l_liveset_saved_wrapper,
                 "liveset_saved",
                 c74::max::A_CANT,
                 0
@@ -720,7 +948,7 @@ public:
             
             c74::max::class_addmethod(
                 (c74::max::t_class*)c,
-                (c74::max::method)handle_m4l_liveset_closed_wrapper,
+                (c74::max::method)max_wrapper::handle_m4l_liveset_closed_wrapper,
                 "liveset_closed",
                 c74::max::A_CANT,
                 0
@@ -728,7 +956,7 @@ public:
             
             c74::max::class_addmethod(
                 (c74::max::t_class*)c,
-                (c74::max::method)handle_m4l_liveset_new_wrapper,
+                (c74::max::method)max_wrapper::handle_m4l_liveset_new_wrapper,
                 "liveset_new",
                 c74::max::A_CANT,
                 0
@@ -748,410 +976,333 @@ public:
             return {};
         }
     };
-    
+
 private:
-    // クライアントとサーバー
+    // クライアントとサーバーのインスタンス
     std::unique_ptr<client> client_;
     std::unique_ptr<server> server_;
-    
-    // Claude Desktopハンドラー
     std::unique_ptr<claude_handler> claude_handler_;
     
-    // 遅延タスク用キュー
+    // アドレスパターンマッピング
+    std::map<std::string, std::string> osc_mappings_;
+    std::mutex osc_mutex_;
+    
+    // 遅延タスクキュー
     std::deque<std::function<void()>> deferred_tasks;
     
-    // OSCアドレスパターンマッピング
-    std::map<std::string, std::string> osc_mappings_;
-    
-    // タスクの遅延実行
-    void defer_task(std::function<void()> task) {
-        deferred_tasks.push_back(task);
-        task_queue.set();
-    }
-    
-    // 静的ラッパー関数（M4Lライフサイクルイベント用）
-    static void* handle_m4l_liveset_loaded_wrapper(void* x) {
-        osc_bridge* self = (osc_bridge*)x;
-        if (self) {
-            self->handle_m4l_liveset_loaded(x);
-        }
-        return nullptr;
-    }
-    
-    static void* handle_m4l_liveset_saved_wrapper(void* x) {
-        osc_bridge* self = (osc_bridge*)x;
-        if (self) {
-            self->handle_m4l_liveset_saved(x);
-        }
-        return nullptr;
-    }
-    
-    static void* handle_m4l_liveset_closed_wrapper(void* x) {
-        osc_bridge* self = (osc_bridge*)x;
-        if (self) {
-            self->handle_m4l_liveset_closed(x);
-        }
-        return nullptr;
-    }
-    
-    static void* handle_m4l_liveset_new_wrapper(void* x) {
-        osc_bridge* self = (osc_bridge*)x;
-        if (self) {
-            self->handle_m4l_liveset_new(x);
-        }
-        return nullptr;
-    }
-    
-    // M4Lライフサイクルイベントハンドラ（Liveセット読み込み時）
-    void handle_m4l_liveset_loaded(void* x) {
-        cout << "Max for Live: Liveset loaded event received" << endl;
+    // クライアント/サーバー初期化
+    void init_client_server() {
+        // 既存のインスタンスをクリア
+        client_.reset();
+        server_.reset();
+        claude_handler_.reset();
         
-        // 切断されていれば再接続
-        if (!connected) {
-            defer_task([this]() {
-                cout << "Reconnecting after liveset loaded..." << endl;
-                connect_client_server();
+        // 新しいインスタンスを作成
+        client_ = std::make_unique<client>();
+        server_ = std::make_unique<server>();
+        claude_handler_ = std::make_unique<claude_handler>(output, error_out);
+        
+        // サーバーの設定
+        if (server_) {
+            // メッセージハンドラを設定
+            // Issue 19: atoms型からosc_args型に変更して型一致を確保
+            server_->set_message_callback([this](const std::string& address, const osc_args& args) {
+                handle_osc_message_osc(address, args);
             });
-        }
-        
-        // 接続状態を更新
-        defer_task([this]() {
-            update_connection_config();
-            send_status_update("liveset_loaded");
-        });
-    }
-    
-    // M4Lライフサイクルイベントハンドラ（Liveセット保存時）
-    void handle_m4l_liveset_saved(void* x) {
-        cout << "Max for Live: Liveset saved event received" << endl;
-        
-        // 現在の接続状態を保存できるように状態更新
-        defer_task([this]() {
-            send_status_update("liveset_saved");
-        });
-    }
-    
-    // M4Lライフサイクルイベントハンドラ（Liveセットクローズ時）
-    void handle_m4l_liveset_closed(void* x) {
-        cout << "Max for Live: Liveset closed event received" << endl;
-        
-        // グレースフルに接続を閉じる
-        defer_task([this]() {
-            // 終了状態を送信してから接続を閉じる
-            send_status_update("liveset_closed");
-            disconnect_client_server();
-        });
-    }
-    
-    // M4Lライフサイクルイベントハンドラ（Liveセット新規作成時）
-    void handle_m4l_liveset_new(void* x) {
-        cout << "Max for Live: Liveset new event received" << endl;
-        
-        // 新規セットの初期化
-        defer_task([this]() {
-            // 接続設定を更新
-            update_connection_config();
             
-            // 新規セットの場合は再接続を試みる
-            if (!connected) {
-                cout << "Reconnecting for new liveset..." << endl;
-                connect_client_server();
-            }
+            // エラーハンドラを設定
+            server_->set_error_callback([this](const error_info& error) {
+                handle_error(error);
+            });
             
-            // 状態更新を送信
-            send_status_update("liveset_new");
-        });
-    }
-    
-    // Claude Desktopメッセージの処理
-    void handle_claude_message(const std::string& address, const atoms& args) {
-        // Claude Desktopハンドラーが初期化されていなければ作成
-        if (!claude_handler_) {
-            claude_handler_ = std::make_unique<claude_handler>(output, error_out);
+            // 低レイテンシモード設定
+            server_->set_low_latency(low_latency);
         }
-        
-        // Claude Desktopハンドラーにメッセージを渡す
-        claude_handler_->process_message(address, args);
-    }
-    
-    // 状態更新を送信するヘルパー関数
-    void send_status_update(const std::string& event_type) {
-        atoms status_info;
-        status_info.push_back(symbol("status"));
-        status_info.push_back(symbol(event_type));
-        status_info.push_back(connected ? 1 : 0);
-        status_info.push_back(static_cast<int>(port_in));
-        status_info.push_back(static_cast<int>(port_out));
-        status_info.push_back(symbol(host.get()));
-        
-        output.send(status_info);
-    }
-    
-    // atomsオブジェクトを文字列に変換するユーティリティ関数
-    std::string atoms_to_string(const atoms& args) {
-        std::ostringstream ss;
-        for (size_t i = 0; i < args.size(); ++i) {
-            const auto& a = args[i];
-            if (i > 0) {
-                ss << " ";
-            }
-            
-            if (a.type() == message_type::float_argument) {
-                ss << a;
-            }
-            else if (a.type() == message_type::int_argument) {
-                ss << a;
-            }
-            else if (a.type() == message_type::symbol_argument) {
-                ss << a;
-            }
-            else {
-                ss << "[" << a.type() << "]";
-            }
-        }
-        return ss.str();
     }
     
     // 接続設定を更新
     void update_connection_config() {
-        // ホスト名とポートの設定を更新
-        auto host_str = std::string(host.get());
-        int in_port = port_in;
-        int out_port = port_out;
-        
-        // M4L環境で動的ポート割り当てが有効な場合、使用可能なポートを探す
         if (m4l_compatibility && dynamic_ports) {
-            // M4L互換性モードでは、49152～65535の範囲でポートを動的に割り当てる
-            if (in_port < 49152 || in_port > 65535) {
-                // 標準的な動的ポート範囲（IANA推奨）を使用
-                in_port = find_available_port(49152, 65535);
-                cout << "Dynamic port allocation: Using port " << in_port << " for input" << endl;
-                port_in = in_port;
+            // M4L互換性モードで動的ポート設定が有効な場合は動的ポートを使用
+            if (port_in <= 0) {
+                port_in = generate_dynamic_port();
             }
-            
-            if (out_port < 49152 || out_port > 65535) {
-                // 受信ポートとは別のポートを使用
-                out_port = find_available_port(49152, 65535, in_port);
-                cout << "Dynamic port allocation: Using port " << out_port << " for output" << endl;
-                port_out = out_port;
-            }
-        }
-        
-        // クライアントとサーバーの設定を更新
-        if (client_) {
-            client_->set_target(host_str, out_port);
-        }
-        
-        if (server_) {
-            server_->set_port(in_port);
         }
     }
     
-    // 使用可能なポートを探す
-    int find_available_port(int min_port, int max_port, int exclude_port = -1) {
-        // このシンプルな実装では、ポート範囲からランダムに選択する
-        // 実際の実装では、UDPソケットを開いてバインドをテストするべき
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<> distrib(min_port, max_port);
-        
-        int port = distrib(gen);
-        
-        // 除外ポートと同じ場合は別のポートを選択
-        if (port == exclude_port) {
-            port = (port + 1) % (max_port - min_port + 1) + min_port;
-        }
-        
-        return port;
-    }
-    
-    // クライアントとサーバーを初期化
-    void init_client_server() {
-        try {
-            // クライアントの作成（存在しない場合のみ）
-            if (!client_) {
-                client_ = std::make_unique<client>();
-                cout << "OSC client initialized" << endl;
-            }
-            
-            // サーバーの作成（存在しない場合のみ）
-            if (!server_) {
-                server_ = std::make_unique<server>();
-                
-                // OSCメッセージ受信時のコールバック設定
-                server_->set_message_callback([this](const std::string& address, const atoms& args) {
-                    // メインスレッドでメッセージ処理を行う
-                    defer_task([this, address, args]() {
-                        handle_incoming_message(address, args);
-                    });
-                });
-                
-                // エラー発生時のコールバック設定
-                server_->set_error_callback([this](const std::string& error_msg) {
-                    defer_task([this, error_msg]() {
-                        error_out.send("server_error", error_msg);
-                        cout << "OSC Server error: " << error_msg << endl;
-                    });
-                });
-                
-                cout << "OSC server initialized" << endl;
-            }
-        }
-        catch (const std::exception& e) {
-            error_out.send("init_error", e.what());
-            cout << "Error initializing OSC client/server: " << e.what() << endl;
-        }
-    }
-    
-    // クライアントとサーバーを接続
+    // 接続確立
     bool connect_client_server() {
         bool success = true;
         
-        try {
-            // 初期化（必要な場合のみ）
+        // クライアント/サーバーが存在しない場合は初期化
+        if (!client_ || !server_) {
             init_client_server();
-            
-            // 接続設定を更新
-            update_connection_config();
-            
-            // クライアントを接続
-            if (client_) {
-                success = client_->connect(std::string(host.get()), port_out);
-            } else {
+        }
+        
+        // クライアント接続
+        if (client_) {
+            std::string host_str = static_cast<std::string>(host.get());
+            if (!client_->connect(host_str, port_in.get())) {
+                error_out.send("client_connect_failed", host_str, port_in.get());
                 success = false;
             }
-            
-            // サーバーを開始
-            if (server_ && success) {
-                success = server_->start(port_in);
-            } else {
+        }
+        
+        // サーバー接続
+        if (server_) {
+            if (!server_->start(port_in.get())) {
+                error_out.send("server_start_failed", port_in.get());
                 success = false;
             }
-            
-            // 低レイテンシモードの設定
-            if (server_ && low_latency && success) {
-                server_->set_low_latency(true);
-            }
-            
-            // 接続状態を更新
-            connected = success;
-            
-            // 既存のマッピングを再登録
-            if (success) {
-                for (const auto& mapping : osc_mappings_) {
-                    server_->add_handler(mapping.first, [this, callback=mapping.second](const std::string& address, const atoms& args) {
-                        defer_task([this, callback, address, args]() {
-                            handle_incoming_message(callback, address, args);
-                        });
-                    });
-                }
-            }
-            
-            return success;
         }
-        catch (const std::exception& e) {
-            error_out.send("connect_error", e.what());
-            cout << "Error connecting OSC client/server: " << e.what() << endl;
-            return false;
-        }
+        
+        // 接続状態を更新
+        connected = success;
+        
+        return success;
     }
     
-    // クライアントとサーバーを切断
+    // 接続切断
     void disconnect_client_server() {
+        // Issue 20: クラッシュ防止のためのエラーハンドリング追加
         try {
-            // サーバーを停止
-            if (server_) {
-                server_->stop();
-            }
-            
-            // クライアントを切断
+            cout << "Debug: disconnect_client_server()内 - client_の切断処理開始" << endl;
             if (client_) {
                 client_->disconnect();
+                cout << "Debug: client_->disconnect()完了" << endl;
+            } else {
+                cout << "Debug: client_はnull" << endl;
             }
             
-            // 接続状態を更新
+            cout << "Debug: disconnect_client_server()内 - server_の停止処理開始" << endl;
+            if (server_) {
+                // 万が一の場合のクラッシュ回避メカニズム
+                // M4L環境での問題を回避するため、複数のステップに分ける
+                try {
+                    server_->stop();
+                    cout << "Debug: server_->stop()完了" << endl;
+                } catch (const std::exception& e) {
+                    // サーバー停止時の例外をキャッチ
+                    cout << "Debug: server_->stop()で例外発生: " << e.what() << endl;
+                    error_out.send("server_stop_error", e.what());
+                }
+            } else {
+                cout << "Debug: server_はnull" << endl;
+            }
+            
+            // 万が一の場合に備えて、メモリ参照前にチェック
+            cout << "Debug: 接続状態をfalseに設定" << endl;
             connected = false;
-        }
-        catch (const std::exception& e) {
+            
+            cout << "Debug: disconnect_client_server()処理完了" << endl;
+        } catch (const std::exception& e) {
+            // 例外発生時も確実に接続状態を更新
+            cout << "Debug: disconnect_client_server()で例外発生: " << e.what() << endl;
+            connected = false;
             error_out.send("disconnect_error", e.what());
-            cout << "Error disconnecting OSC client/server: " << e.what() << endl;
+        } catch (...) {
+            // 不明な例外もキャッチ
+            cout << "Debug: disconnect_client_server()で不明な例外発生" << endl;
+            connected = false;
+            error_out.send("disconnect_unknown_error");
         }
     }
     
-    // 受信メッセージの処理
-    void handle_incoming_message(const std::string& address, const atoms& args) {
-        // アドレスパターンの確認
-        if (address.rfind("/claude/", 0) == 0) {
-            // Claude Desktop専用メッセージの処理
-            handle_claude_message(address, args);
+    // OSCメッセージ処理 - Min-DevKit型バージョン
+    // Issue 19: Min-DevKit型とOSC独自型の両方をサポート
+    void handle_osc_message(const std::string& address, const atoms& args) {
+        // OSC独自型に変換して内部関数を呼び出す
+        handle_osc_message_internal(address, convert_to_osc_args(args));
+    }
+    
+    // OSCメッセージ処理 - OSC独自型バージョン
+    void handle_osc_message_osc(const std::string& address, const osc_args& args) {
+        handle_osc_message_internal(address, args);
+    }
+    
+    // OSCメッセージ処理 - 内部実装
+    void handle_osc_message_internal(const std::string& address, const osc_args& args) {
+        // アドレスパターンマッピングを適用
+        std::string mapped_address = apply_address_mapping(address);
+        
+        // Claude Desktop固有のメッセージ処理
+        if (address.find("/claude/") == 0 && claude_handler_) {
+            // Claudeハンドラーを呼び出す前にMin-DevKit型に変換
+            claude_handler_->process_message(address, convert_to_atoms(args));
             return;
         }
         
-        // 通常のOSCメッセージとして出力
-        atoms message_atoms;
-        message_atoms.push_back(symbol(address));
+        // 一般的なOSCメッセージ処理
+        atoms out_args;
+        out_args.push_back(symbol(mapped_address));
         
-        // 残りの引数を追加
-        for (size_t i = 0; i < args.size(); ++i) {
-            message_atoms.push_back(args[i]);
+        // 引数の追加（OSC独自型からMin-DevKit型に変換）
+        atoms converted_args = convert_to_atoms(args);
+        for (const auto& arg : converted_args) {
+            out_args.push_back(arg);
         }
         
-        // メッセージをアウトレットに送信
-        output.send(message_atoms);
-    }
-    
-    // マッピング用の受信メッセージ処理
-    void handle_incoming_message(const std::string& callback_pattern, const std::string& address, const atoms& args) {
-        // コールバックパターンに基づいて処理
-        // /claude/* パターンの場合はClaude Desktop関連の処理を行う
-        if (callback_pattern == "/claude/*") {
-            handle_claude_message(address, args);
-            return;
-        }
-        
-        // メッセージの構築
-        atoms message_args;
-        message_args.push_back(symbol(callback_pattern));
-        message_args.push_back(symbol(address));
-        
-        // 引数を追加
-        for (const auto& arg : args) {
-            message_args.push_back(arg);
-        }
-        
-        // メッセージをログに出力
-        if (false) { // デバッグモードの場合のみ
-            cout << "Mapped OSC message: " << callback_pattern << " " << address << " " << atoms_to_string(args) << endl;
-        }
-        
-        // アウトレットに送信
-        output.send(message_args);
-    }
-    
-    // OSCアドレスパターンからハンドラーへのマッピングを登録
-    bool map_address(const std::string& pattern, const std::string& callback_pattern) {
-        // 接続状態を確認
-        if (!server_) {
-            return false;
-        }
-        
-        // マッピングをサーバーに登録
-        server_->add_handler(pattern, [this, callback=callback_pattern](const std::string& address, const atoms& args) {
-            // メインスレッドで処理するために遅延実行
-            defer_task([this, callback, address, args]() {
-                handle_incoming_message(callback, address, args);
-            });
+        // 出力
+        defer_task([this, out_args]() {
+            output.send(out_args);
         });
+    }
+    
+    // エラー処理
+    void handle_error(const error_info& error) {
+        // エラー情報の構築
+        atoms error_args;
+        error_args.push_back(symbol("osc_error"));
         
-        // マッピングを保存（サーバー再接続時に使用）
-        osc_mappings_[pattern] = callback_pattern;
+        // エラーコードをシンボルに変換
+        std::string error_code;
+        switch (error.code) {
+            case osc_error_code::receive_failed:
+                error_code = "receive_failed";
+                break;
+            case osc_error_code::send_failed:
+                error_code = "send_failed";
+                break;
+            case osc_error_code::connection_failed:  // socket_errorの代わり
+                error_code = "socket_error";
+                break;
+            case osc_error_code::invalid_args:  // format_errorの代わり
+                error_code = "format_error";
+                break;
+            default:
+                error_code = "unknown_error";
+                break;
+        }
         
+        error_args.push_back(symbol(error_code));
+        error_args.push_back(symbol(error.message));
+        
+        // エラー出力
+        defer_task([this, error_args]() {
+            error_out.send(error_args);
+        });
+    }
+    
+    // アドレスマッピングを登録
+    bool map_address(const std::string& pattern, const std::string& callback) {
+        std::lock_guard<std::mutex> lock(osc_mutex_);
+        osc_mappings_[pattern] = callback;
         return true;
+    }
+    
+    // マッピングを適用
+    std::string apply_address_mapping(const std::string& address) {
+        std::lock_guard<std::mutex> lock(osc_mutex_);
+        
+        // 完全一致優先
+        if (osc_mappings_.find(address) != osc_mappings_.end()) {
+            return osc_mappings_[address];
+        }
+        
+        // ワイルドカードマッチング
+        for (const auto& mapping : osc_mappings_) {
+            if (mapping.first.find("*") != std::string::npos) {
+                // 単純なワイルドカード置換
+                if (mapping.first.find("/*/") != std::string::npos) {
+                    std::string pattern = mapping.first;
+                    std::string replacement = mapping.second;
+                    
+                    // /*/の置換
+                    size_t wildcard_pos = pattern.find("/*/");
+                    if (wildcard_pos != std::string::npos) {
+                        std::string prefix = pattern.substr(0, wildcard_pos);
+                        if (address.find(prefix) == 0) {
+                            // プレフィックスから始まるアドレスにマッチ
+                            std::string suffix = pattern.substr(wildcard_pos + 3);
+                            size_t suffix_pos = address.find(suffix, prefix.length());
+                            
+                            if (suffix.empty() || suffix_pos != std::string::npos) {
+                                // サフィックスが空か、サフィックスにマッチする場合
+                                // ワイルドカード部分を抽出
+                                std::string wildcard_part = address.substr(prefix.length(),
+                                    suffix.empty() ? std::string::npos : suffix_pos - prefix.length());
+                                
+                                // 置換パターンの適用
+                                size_t repl_wildcard_pos = replacement.find("/*/");
+                                if (repl_wildcard_pos != std::string::npos) {
+                                    return replacement.substr(0, repl_wildcard_pos) + wildcard_part +
+                                           replacement.substr(repl_wildcard_pos + 3);
+                                } else {
+                                    return replacement;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // 末尾ワイルドカード
+                if (mapping.first.back() == '*') {
+                    std::string pattern = mapping.first.substr(0, mapping.first.length() - 1);
+                    if (address.find(pattern) == 0) {
+                        // パターンの末尾を置換
+                        std::string wildcard_part = address.substr(pattern.length());
+                        std::string replacement = mapping.second;
+                        
+                        if (replacement.back() == '*') {
+                            return replacement.substr(0, replacement.length() - 1) + wildcard_part;
+                        } else {
+                            return replacement;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // マッチするマッピングが見つからない場合は元のアドレスを返す
+        return address;
+    }
+    
+    // 遅延タスクを追加
+    void defer_task(const std::function<void()>& task) {
+        deferred_tasks.push_back(task);
+        task_queue.set();
+    }
+    
+    // 動的ポートの生成（M4L互換性モード用）
+    int generate_dynamic_port() {
+        // 動的ポート範囲（49152～65535のうちの一つをランダムに生成）
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<> dis(49152, 65535);
+        return dis(gen);
+    }
+    
+    // Max for Liveライフサイクルハンドラ
+    void handle_m4l_liveset_loaded() {
+        defer_task([this]() {
+            connect_client_server();
+            cout << "M4L liveset loaded, reconnecting OSC" << endl;
+        });
+    }
+    
+    void handle_m4l_liveset_saved() {
+        defer_task([this]() {
+            cout << "M4L liveset saved" << endl;
+        });
+    }
+    
+    void handle_m4l_liveset_closed() {
+        defer_task([this]() {
+            disconnect_client_server();
+            cout << "M4L liveset closed, disconnecting OSC" << endl;
+        });
+    }
+    
+    void handle_m4l_liveset_new() {
+        defer_task([this]() {
+            cout << "M4L new liveset created" << endl;
+        });
     }
 };
 
+// Min外部オブジェクトをクラスから生成
 } // namespace osc
 } // namespace mcp
 
-// 外部オブジェクトとして登録
+// 名前空間の外でMIN_EXTERNALを呼び出す必要があります
 MIN_EXTERNAL(mcp::osc::osc_bridge);

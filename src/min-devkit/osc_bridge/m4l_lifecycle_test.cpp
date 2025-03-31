@@ -1,6 +1,20 @@
+/// @file
+///	@ingroup 	mcpmodules
+///	@copyright	Copyright 2025 The Max 9-Claude Desktop Integration Project. All rights reserved.
+///	@license	Use of this source code is governed by the MIT License found in the License.md file.
+
 // M4Lライフサイクルイベントテスト
 // M4L環境でのOSC Bridgeの動作をテスト
 
+// テストフレームワークのインクルード
+#include "c74_min.h"
+#include "c74_min_catch.h"
+
+// テスト対象のインクルード
+#include "max_wrapper.hpp"
+#include "mcp.osc_types.hpp"
+
+// 標準ライブラリ
 #include <random>
 #include <thread>
 #include <chrono>

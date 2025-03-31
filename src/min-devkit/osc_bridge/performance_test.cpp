@@ -1,6 +1,20 @@
+/// @file
+///	@ingroup 	mcpmodules
+///	@copyright	Copyright 2025 The Max 9-Claude Desktop Integration Project. All rights reserved.
+///	@license	Use of this source code is governed by the MIT License found in the License.md file.
+
 // パフォーマンスとリソース管理テスト
 // M4L環境でのOSC Bridgeのパフォーマンスと資源効率をテスト
 
+// テストフレームワークのインクルード
+#include "c74_min.h"
+#include "c74_min_catch.h"
+
+// テスト対象のインクルード
+#include "max_wrapper.hpp"
+#include "mcp.osc_types.hpp"
+
+// 標準ライブラリ
 #include <random>
 #include <thread>
 #include <chrono>
@@ -8,6 +22,7 @@
 #include <numeric>
 #include <ctime>
 #include <algorithm>
+#include <functional>
 
 // ランダムポート生成用ヘルパー関数
 int random_port(int min, int max) {
