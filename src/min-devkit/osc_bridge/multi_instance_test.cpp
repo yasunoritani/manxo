@@ -1,7 +1,7 @@
 /// @file
-///	@ingroup 	mcpmodules
-///	@copyright	Copyright 2025 The Max 9-Claude Desktop Integration Project. All rights reserved.
-///	@license	Use of this source code is governed by the MIT License found in the License.md file.
+///@ingroup mcpmodules
+///@copyrightCopyright 2025 The Max 9-Claude Desktop Integration Project. All rights reserved.
+///@licenseUse of this source code is governed by the MIT License found in the License.md file.
 
 // 複数インスタンステスト
 // M4L環境での複数OSC Bridgeインスタンス共存のテスト
@@ -108,63 +108,52 @@ SCENARIO("Multiple OSC Bridge Instances Test") {
             // 各インスタンスに複数のメッセージを送信
             for (int i = 0; i < instance_count; i++) {
                 for (int j = 0; j < messages_per_instance; j++) {
-                    clients[i].send("/test/multi", atoms{"test"});
-                    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+                    atoms args = {j};
+                    clients[i].send("/test/multi", args);
                 }
             }
             
-            // 処理完了待ち
+            // 処理待ち
             std::this_thread::sleep_for(std::chrono::milliseconds(200));
             
-            THEN("Each instance should receive its own messages") {
+            THEN("Each instance should receive correct message count") {
                 for (int i = 0; i < instance_count; i++) {
+                    // 各インスタンスがメッセージ数分だけ受信しているか検証
                     CHECK(counter.get_count(i) == messages_per_instance);
                 }
             }
         }
         
         WHEN("One instance is disconnected") {
-            // 2番目のインスタンスを切断（インデックスは1）
-            if (instance_count >= 2) {
-                int disconnected_idx = 1;
-                
-                // 切断前にテストメッセージを送信
-                for (int i = 0; i < instance_count; i++) {
-                    clients[i].send("/test/multi", atoms{"before_disconnect"});
+            // 現在のカウント状態をキャプチャ
+            std::vector<int> before_counts;
+            for (int i = 0; i < instance_count; i++) {
+                before_counts.push_back(counter.get_count(i));
+            }
+            
+            // 1つのインスタンスを切断（例：最初のインスタンス）
+            int disconnected_idx = 0;
+            servers[disconnected_idx].disconnect();
+            
+            // 残りのインスタンスにメッセージを送信
+            for (int i = 0; i < instance_count; i++) {
+                if (i != disconnected_idx) {
+                    atoms args = {"after_disconnect"};
+                    clients[i].send("/test/multi", args);
                 }
+            }
+            
+            // 処理待ち
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            
+            THEN("Other instances should continue to function") {
+                // 切断されたインスタンスのカウントは変化しないはず
+                CHECK(counter.get_count(disconnected_idx) == before_counts[disconnected_idx]);
                 
-                // 処理待ち
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                
-                // 切断前のカウントを記録
-                std::vector<int> before_counts;
-                for (int i = 0; i < instance_count; i++) {
-                    before_counts.push_back(counter.get_count(i));
-                }
-                
-                // 2番目のインスタンスを切断
-                clients[disconnected_idx].disconnect();
-                servers[disconnected_idx].disconnect();
-                
-                // 他のインスタンスにメッセージを送信
+                // 他のインスタンスは新しいメッセージを受信しているはず
                 for (int i = 0; i < instance_count; i++) {
                     if (i != disconnected_idx) {
-                        clients[i].send("/test/multi", atoms{"after_disconnect"});
-                    }
-                }
-                
-                // 処理待ち
-                std::this_thread::sleep_for(std::chrono::milliseconds(100));
-                
-                THEN("Other instances should continue to function") {
-                    // 切断されたインスタンスのカウントは変化しないはず
-                    CHECK(counter.get_count(disconnected_idx) == before_counts[disconnected_idx]);
-                    
-                    // 他のインスタンスは新しいメッセージを受信しているはず
-                    for (int i = 0; i < instance_count; i++) {
-                        if (i != disconnected_idx) {
-                            CHECK(counter.get_count(i) == before_counts[i] + 1);
-                        }
+                        CHECK(counter.get_count(i) == before_counts[i] + 1);
                     }
                 }
             }
