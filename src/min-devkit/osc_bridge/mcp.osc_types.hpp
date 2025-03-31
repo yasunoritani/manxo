@@ -1,9 +1,14 @@
 #pragma once
 
-#include "c74_min.h"
+// Issue 19: Min-DevKitヘッダーの重複インクルード対応
+// OSC関連の独自型定義のみを含むヘッダーファイル
+// Min-DevKit依存を完全におけるため、c74_min.hのインクルードは許可しない
+
+// 標準ライブラリ
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <functional>
 #include <mutex>
 #include <random>
@@ -14,17 +19,20 @@
 // oscpackヘッダー
 #include "ip/UdpSocket.h"
 
-using namespace c74::min;
-
+// OSC独自型を定義する名前空間
 namespace mcp {
 namespace osc {
 
 /**
  * OSCメッセージの基本構造体
+ * Issue 19: Min-DevKit依存を取り除き独自の型定義を使用
  */
+using osc_value = std::string;  // 演算のための簡略型（実装では実際の型にキャストする）
+using osc_args = std::vector<osc_value>;
+
 struct message {
     std::string address;    // OSCアドレスパターン
-    atoms args;             // 引数リスト
+    osc_args args;         // 引数リスト
     
     // 比較演算子（テスト用）
     bool operator==(const message& other) const {
@@ -108,7 +116,7 @@ public:
             // タイムアウトを設定するなどの詳細設定が必要な場合はここに追加
             IpEndpointName endpoint(IpEndpointName::ANY_ADDRESS, port);
             socket.Bind(endpoint);
-            socket.Close();
+            // ソケットはスコープを抜けると自動的にクローズされる
             return true;
         } catch (const std::exception& e) {
             // 具体的な例外情報をログに記録できるように
@@ -200,7 +208,8 @@ enum class osc_error_code {
     receive_failed,      // 受信失敗
     invalid_address,     // 無効なアドレス
     invalid_args,        // 無効な引数
-    timeout              // タイムアウト
+    timeout,             // タイムアウト
+    unknown_error        // 不明なエラー
 };
 
 /**
@@ -218,8 +227,9 @@ struct error_info {
 
 /**
  * OSCメッセージハンドラの型定義
+ * Issue 19: atomsの代わりにosc_argsを使用
  */
-using message_handler = std::function<void(const std::string& address, const atoms& args)>;
+using message_handler = std::function<void(const std::string& address, const osc_args& args)>;
 
 /**
  * エラーハンドラの型定義

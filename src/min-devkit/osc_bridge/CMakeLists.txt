@@ -21,10 +21,11 @@ include_directories(
 	"${C74_INCLUDES}"
 )
 
-# ソースファイル設定 - Min-DevKitでは同じヘッダーを複数のファイルで使うと重複シンボルが発生するため、
-# 統合した単一ファイルのみを使用する
+# ソースファイル設定 - Issue 19: Min-DevKitヘッダーの重複インクルード対応
+# Min-DevKitの設計思想に従い、単一ファイル方式を采用する
+# Min-DevKitヘッダー(c74_min.h)は各ソースファイルで一度だけインクルードされる必要がある
 set(SOURCE_FILES
-	mcp.osc_bridge.cpp
+	osc_bridge.cpp
 )
 
 # ライブラリの定義

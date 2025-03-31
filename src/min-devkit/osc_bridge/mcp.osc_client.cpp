@@ -108,7 +108,7 @@ public:
             catch (...) {
                 // 不明な例外の捕捉
                 last_error_ = error_info{
-                    osc_error_code::unknown_error,
+                    osc_error_code::connection_failed,
                     "Unknown connection error occurred"
                 };
                 connection_state_ = connection_state::error;
@@ -171,35 +171,35 @@ public:
         try {
             // バッファを準備
             char buffer[config_.buffer_size];
-            osc::OutboundPacketStream packet(buffer, config_.buffer_size);
+            ::osc::OutboundPacketStream packet(buffer, config_.buffer_size);
             
             // メッセージの作成を開始
-            packet << osc::BeginMessage(msg.address.c_str());
+            packet << ::osc::BeginMessage(msg.address.c_str());
             
             // 各引数を適切な型でパケットに追加
             for (const auto& arg : msg.args) {
-                if (arg.is_int()) {
-                    packet << arg.as_int();
+                if (arg.a_type == c74::max::A_LONG) {
+                    packet << static_cast<int>(arg);
                 }
-                else if (arg.is_float()) {
-                    packet << arg.as_float();
+                else if (arg.a_type == c74::max::A_FLOAT) {
+                    packet << static_cast<float>(arg);
                 }
-                else if (arg.is_string()) {
-                    packet << arg.as_string().c_str();
+                else if (arg.a_type == c74::max::A_SYM) {
+                    packet << static_cast<std::string>(arg).c_str();
                 }
-                else if (arg.is_bool()) {
-                    packet << (arg.as_bool() ? true : false);
+                else if (arg.a_type == c74::max::A_LONG) { // Boolとして扱う
+                    packet << static_cast<bool>(arg);
                 }
-                else if (arg.is_symbol()) {
-                    std::string sym = arg.as_string();
+                else if (arg.a_type == c74::max::A_SYM) { // シンボルとして再処理
+                    std::string sym = static_cast<std::string>(arg);
                     
                     if (sym == "nil") {
                         // nil値のOSC送信
-                        packet << osc::Nil;
+                        packet << ::osc::Nil;
                     }
                     else if (sym == "infinitum") {
                         // 無限大のOSC送信
-                        packet << osc::Infinitum;
+                        packet << ::osc::Infinitum;
                     }
                     else if (sym == "blob" && msg.args.size() > 1) {
                         // 次の引数がblobサイズを示す場合はスキップ
@@ -213,7 +213,7 @@ public:
             }
             
             // メッセージの終了
-            packet << osc::EndMessage;
+            packet << ::osc::EndMessage;
             
             // メッセージの送信
             socket_->Send(packet.Data(), packet.Size());
@@ -330,7 +330,7 @@ public:
      */
     bool send_message_with_error_handling(const std::string& address, const atoms& args, bool retry_on_error = true) {
         try {
-            return send_osc_message(address, args);
+            return send(address, args);
         } catch (const std::exception& e) {
             // 送信失敗時のエラー処理
             error_info err = {osc_error_code::send_failed, std::string("Failed to send OSC message: ") + e.what()};
@@ -380,14 +380,57 @@ public:
         }
     }
 
+    // エラーハンドラを設定
+    void set_error_handler(error_handler handler) {
+        error_handler_ = handler;
+    }
+    
+    // 接続状態を取得
+    connection_state get_connection_state() const {
+        return connection_state_;
+    }
+    
+    // 最後のエラーを取得
+    const error_info& get_last_error() const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        return last_error_;
+    }
+    
+    // 接続設定を更新
+    bool update_config(const connection_config& config, bool reconnect = true) {
+        bool was_connected = false;
+        
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            
+            // 現在の接続状態を保存
+            was_connected = (connection_state_ == connection_state::connected);
+            
+            // 一旦切断
+            if (was_connected) {
+                disconnect_socket();
+            }
+            
+            // 設定を更新
+            config_ = config;
+        }
+        
+        // 再接続が必要な場合
+        if (reconnect && was_connected) {
+            return connect();
+        }
+        
+        return true;
+    }
+
 private:
-    connection_config config_;       // 接続設定
-    UdpTransmitSocket* socket_;      // UDPソケット
-    std::atomic<bool> running_;      // 実行フラグ
-    std::atomic<connection_state> connection_state_;  // 接続状態
-    error_info last_error_;          // 最後のエラー
-    error_handler error_handler_;    // エラーハンドラ
-    mutable std::mutex mutex_;       // スレッドセーフな操作のためのミューテックス
+    connection_config config_;                  // 接続設定
+    UdpTransmitSocket* socket_;                // UDPソケット
+    std::atomic<bool> running_;                // 実行中フラグ
+    std::atomic<connection_state> connection_state_; // 接続状態
+    error_info last_error_;                    // 最後のエラー
+    error_handler error_handler_;              // エラーハンドラ
+    mutable std::mutex mutex_;                 // スレッド同期用ミューテックス
 };
 
 } // namespace osc

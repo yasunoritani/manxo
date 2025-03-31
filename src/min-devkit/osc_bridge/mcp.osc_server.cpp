@@ -64,8 +64,9 @@ protected:
                 }
                 else if (arg->IsBlob()) {
                     // BLOBデータは現状サポート外だが、将来の拡張性のために長さを通知
-                    const void* blob_data = arg->AsBlob();
-                    const osc::osc_bundle_element_size_t blob_size = arg->AsBlobSize();
+                    const void* blob_data = nullptr;
+                    ::osc::osc_bundle_element_size_t blob_size = 0;
+                    arg->AsBlob(blob_data, blob_size);
                     
                     if (blob_size <= MAX_BLOB_SIZE) {
                         // シンプルなblobサイズの通知
@@ -160,7 +161,7 @@ public:
           connection_state_(connection_state::disconnected) {
         
         // ハンドラレジストリを初期化
-        registry_ = std::make_unique<handler_registry>();
+        registry_ = std::make_shared<handler_registry>();
     }
     
     /**
@@ -168,14 +169,14 @@ public:
      * 接続を閉じる
      */
     ~server() {
-        disconnect();
+        stop();
     }
     
     /**
-     * 接続を開始
+     * サーバーを開始
      * @return 成功時true、失敗時false
      */
-    bool connect() {
+    bool start() {
         if (connection_state_ == connection_state::connected) {
             return true; // 既に接続済み
         }
@@ -186,7 +187,7 @@ public:
         try {
             // 以前の接続があれば閉じる
             if (running_) {
-                disconnect();
+                stop_internal();
             }
             
             // パケットリスナーを作成
@@ -255,9 +256,9 @@ public:
     }
     
     /**
-     * 接続を閉じる
+     * サーバーを停止
      */
-    void disconnect() {
+    void stop() {
         // スレッドを停止
         running_ = false;
         
@@ -371,8 +372,20 @@ private:
     std::atomic<connection_state> connection_state_;  // 接続状態
     error_info last_error_;            // 最後のエラー
     error_handler error_handler_;      // エラーハンドラ
-    std::unique_ptr<handler_registry> registry_;  // ハンドラレジストリ
+private:
+    connection_config config_;                     // 接続設定
+    UdpListeningReceiveSocket* socket_;           // UDPソケット
+    packet_listener* listener_;                   // OSCパケットリスナー
+    std::shared_ptr<handler_registry> registry_;   // メッセージハンドラーレジストリ
+    std::thread* receive_thread_;                 // 受信スレッド
+    std::atomic<bool> running_;                   // 実行中フラグ
+    std::atomic<connection_state> connection_state_; // 接続状態
+    error_info last_error_;                       // 最後のエラー
+    error_handler error_handler_;                 // エラーハンドラ
+    mutable std::mutex mutex_;                    // スレッド同期用ミューテックス
 };
+
+
 
 } // namespace osc
 } // namespace mcp
