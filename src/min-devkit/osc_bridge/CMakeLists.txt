@@ -45,10 +45,10 @@ set(SOURCE_FILES
 	osc_bridge.cpp
 )
 
-# Issue 23: Min-DevKit依存のないスタンドアロンテストを使用
+# Issue 24: Min-DevKit依存のないスタンドアロンテストを使用
 set(TEST_FILES
 	tests/standalone_test.cpp
-	# Issue 23: Min-DevKit依存を解決するまでerror_recovery_test.cppを一時的に無効化
+	# Issue 24: Min-DevKit依存のないテストに移行中
 	# tests/error_recovery_test.cpp
 	# 以下のテストファイルはフレームワークが安定した後に有効化する
 	# tests/simple_test.cpp
@@ -58,6 +58,10 @@ set(TEST_FILES
 	# tests/multi_instance_test.cpp
 	# tests/performance_test.cpp
 )
+
+# Issue 24: スタンドアロンテスト環境のセットアップ
+# スタンドアロンビルドのサポート（tests/CMakeLists.txtで定義）
+add_subdirectory(tests)
 
 # ライブラリの定義
 add_library( 
