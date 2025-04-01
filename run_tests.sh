@@ -28,12 +28,26 @@ cmake --build "${BUILD_DIR}" --target test_osc_bridge
 echo "🧪 テストを実行しています..."
 cd "${BUILD_DIR}"
 
-# OSC Bridge用ディレクトリの確認と準備
-TEST_BIN_DIR="${BUILD_DIR}/tests"
-if [ ! -d "${TEST_BIN_DIR}" ]; then
-    echo "❌ エラー: テスト出力ディレクトリが見つかりませんでした: ${TEST_BIN_DIR}"
+# テストバイナリの確認
+TEST_BINARY="${BUILD_DIR}/tests/test_osc_bridge"
+if [ ! -f "${TEST_BINARY}" ]; then
+    echo "❌ エラー: テストバイナリが見つかりませんでした: ${TEST_BINARY}"
+    echo "ビルドディレクトリを確認: $(ls -la ${BUILD_DIR})"
+    echo "testsディレクトリを確認: $(ls -la ${BUILD_DIR}/tests 2>/dev/null || echo 'testsディレクトリが存在しません')"
     exit 1
 fi
+
+# Max/MSPフレームワークのパスを設定
+MAX_SDK_PATH="${PROJECT_ROOT}/min-dev/min-devkit/source/min-api/max-sdk-base/c74support"
+MAX_FRAMEWORK_PATH="${MAX_SDK_PATH}/max-includes"
+JIT_FRAMEWORK_PATH="${MAX_SDK_PATH}/jit-includes"
+MSP_FRAMEWORK_PATH="${MAX_SDK_PATH}/msp-includes"
+
+# 現在の作業ディレクトリを保存
+CURRENT_DIR=$(pwd)
+
+# テスト実行ディレクトリに移動
+cd "$(dirname "${TEST_BINARY}")"
 
 # テスト実行（フィルター付きまたはすべて）
 echo "📋 テスト実行ログは ${TEST_LOG_FILE} に保存されます"
@@ -43,13 +57,24 @@ echo "📋 テスト実行ログは ${TEST_LOG_FILE} に保存されます"
     echo "実行日時: $(date)"
     echo "=================================="
     echo ""
+    echo "環境設定情報:"
+    echo "- Max SDKパス: ${MAX_SDK_PATH}"
+    echo "- テストバイナリ: $(basename "${TEST_BINARY}")"
+    echo "- 実行ディレクトリ: $(pwd)"
+    echo ""
     
     if [ -n "$1" ]; then
         echo "🔍 フィルター '$1' でテストを実行"
-        "${TEST_BIN_DIR}/test_osc_bridge" "$1" -s
+        # 環境変数を設定してテスト実行
+        DYLD_FRAMEWORK_PATH="${MAX_FRAMEWORK_PATH}:${JIT_FRAMEWORK_PATH}:${MSP_FRAMEWORK_PATH}:$DYLD_FRAMEWORK_PATH" \
+        DYLD_LIBRARY_PATH="${MAX_FRAMEWORK_PATH}:${JIT_FRAMEWORK_PATH}:${MSP_FRAMEWORK_PATH}:$DYLD_LIBRARY_PATH" \
+            "./$(basename "${TEST_BINARY}")" "$1" -s
     else 
         echo "🔍 全テストを実行"
-        "${TEST_BIN_DIR}/test_osc_bridge" -s
+        # 環境変数を設定してテスト実行
+        DYLD_FRAMEWORK_PATH="${MAX_FRAMEWORK_PATH}:${JIT_FRAMEWORK_PATH}:${MSP_FRAMEWORK_PATH}:$DYLD_FRAMEWORK_PATH" \
+        DYLD_LIBRARY_PATH="${MAX_FRAMEWORK_PATH}:${JIT_FRAMEWORK_PATH}:${MSP_FRAMEWORK_PATH}:$DYLD_LIBRARY_PATH" \
+            "./$(basename "${TEST_BINARY}")" -s
     fi
     
     # 終了コードを保存
@@ -63,6 +88,9 @@ echo "📋 テスト実行ログは ${TEST_LOG_FILE} に保存されます"
         echo "❌ テスト結果: 失敗"
     fi
     echo "=================================="
+    
+    # 元のディレクトリに戻る
+    cd "${CURRENT_DIR}"
 } | tee "${TEST_LOG_FILE}"
 
 # 結果の評価

@@ -8,8 +8,8 @@
 #include "c74_min_catch.h"
 
 // テスト対象のインクルード
-#include "max_wrapper.hpp"
-#include "mcp.osc_types.hpp"
+#include "../max_wrapper.hpp"
+#include "../mcp.osc_types.hpp"
 
 // OSC拡張型テスト用補助関数
 int random_port(int min, int max) {

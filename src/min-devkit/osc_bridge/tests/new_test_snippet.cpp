@@ -8,8 +8,8 @@
 #include "c74_min_catch.h"
 
 // テスト対象のインクルード
-#include "max_wrapper.hpp"
-#include "mcp.osc_types.hpp"
+#include "../max_wrapper.hpp"
+#include "../mcp.osc_types.hpp"
 
 // 標準ライブラリ
 #include <random>
