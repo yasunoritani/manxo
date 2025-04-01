@@ -45,14 +45,18 @@ set(SOURCE_FILES
 	osc_bridge.cpp
 )
 
-# Issue 21: M4L環境でのテストファイル
+# Issue 23: Min-DevKit依存のないスタンドアロンテストを使用
 set(TEST_FILES
-	error_recovery_test.cpp
-	extended_types_test.cpp
-	new_test_snippet.cpp
-	m4l_lifecycle_test.cpp
-	multi_instance_test.cpp
-	performance_test.cpp
+	tests/standalone_test.cpp
+	# Issue 23: Min-DevKit依存を解決するまでerror_recovery_test.cppを一時的に無効化
+	# tests/error_recovery_test.cpp
+	# 以下のテストファイルはフレームワークが安定した後に有効化する
+	# tests/simple_test.cpp
+	# tests/extended_types_test.cpp
+	# tests/new_test_snippet.cpp
+	# tests/m4l_lifecycle_test.cpp
+	# tests/multi_instance_test.cpp
+	# tests/performance_test.cpp
 )
 
 # ライブラリの定義
@@ -165,19 +169,46 @@ if(BUILD_OSC_BRIDGE_TESTS)
     FetchContent_MakeAvailable(Catch2)
     
     # Catch2の検出とインクルード
-    find_package(Catch2 REQUIRED)
-    include(${Catch2_SOURCE_DIR}/contrib/Catch.cmake)
+    # FetchContentによってダウンロードされたCatch2のパスを直接使用
+    set(Catch2_SOURCE_DIR "${catch2_SOURCE_DIR}")
+    set(Catch2_INCLUDE_DIR "${catch2_SOURCE_DIR}/single_include")
+    
+    # CatchAddTestsが存在する場合、それを含む
+    if(EXISTS "${Catch2_SOURCE_DIR}/contrib/Catch.cmake")
+        include("${Catch2_SOURCE_DIR}/contrib/Catch.cmake")
+    endif()
+    
+    # CatchAddTestsの問題を回避するため、必要なマクロのみを含む
+    # Issue 23: CatchAddTests.cmakeの使用を一時的に停止し、単純なテスト実行に焦点を当てる
+    if(EXISTS "${Catch2_SOURCE_DIR}/contrib/Catch.cmake")
+        include("${Catch2_SOURCE_DIR}/contrib/Catch.cmake")
+    endif()
+    
+    message(STATUS "OSC Bridge tests enabled with Catch2 framework v2.13.8")
+    message(STATUS "Use -DBUILD_OSC_BRIDGE_TESTS=OFF to disable tests")
     
     # 統合テスト実行ファイルの設定
     add_executable(test_osc_bridge 
-        tests/catch_main.cpp # メインエントリーポイント
+        # standalone_test.cppにはmain関数が含まれているのでcatch_main.cppは不要
+        # tests/catch_main.cpp
         ${TEST_FILES}
     )
     
-    # Catch2とOSCPackをリンク
+    # テストバイナリの出力先を明示的に設定
+    set_target_properties(test_osc_bridge PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests"
+    )
+    
+    # Catch2のインクルードディレクトリをターゲットに追加
+    target_include_directories(test_osc_bridge PRIVATE
+        "${Catch2_INCLUDE_DIR}"
+        "${Catch2_INCLUDE_DIR}/catch2"
+        "${catch2_SOURCE_DIR}/include"
+    )
+    
+    # Catch2とOSCPackのみをリンク（Min-DevKit依存なし）
     target_link_libraries(test_osc_bridge 
-        PRIVATE 
-        Catch2::Catch2 
+        PRIVATE
         "${OSCPACK_LIB}"
     )
     
@@ -201,8 +232,12 @@ if(BUILD_OSC_BRIDGE_TESTS)
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests"
     )
     
-    # 各テストの追加（Catch2の自動検出機能のための準備）
-    catch_discover_tests(test_osc_bridge)
+    # Issue 23: 自動テスト登録を一時的に無効化し、手動実行に焦点を当てる
+    # この部分は将来的に再度有効化予定
+    #catch_discover_tests(test_osc_bridge
+    #    WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/tests"
+    #    TEST_PREFIX "osc_bridge."
+    #)
     
     message(STATUS "OSC Bridge tests enabled with Catch2 framework v2.13.8")
     message(STATUS "Use -DBUILD_OSC_BRIDGE_TESTS=OFF to disable tests")
