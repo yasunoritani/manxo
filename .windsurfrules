@@ -1,8 +1,8 @@
 {
   "projectRules": {
     "name": "v8ui OSC Bridge 開発ルール",
-    "version": "1.1.1",
-    "lastUpdated": "2025-03-30"
+    "version": "1.1.2",
+    "lastUpdated": "2025-04-01"
   },
 
   "protectedDirectories": [
@@ -23,13 +23,32 @@
   "gitRules": {
     "pullRequest": {
       "useToolOnly": true,
-      "toolPath": "/Users/mymac/v8ui/tools/create_pr.py,
+      "toolPath": "/Users/mymac/v8ui/tools/create_pr.py",
       "warningMessage": "プルリクエストは必ず専用ツールを使用して作成してください。トークンはルートディレクトリの.envにある"
     },
     "branch": {
       "namingConvention": "feature/issue-{number}-{description}",
       "examples": ["feature/issue-13-osc-migration", "feature/issue-17-osc-bridge-naming"],
       "numberReference": "branchの{number}はGitHubの#番号ではなく、Issue名の番号を使用すること"
+    },
+    "submodules": {
+      "oscpack": {
+        "path": "/Users/mymac/v8ui/oscpack",
+        "remote": "https://github.com/RossBencina/oscpack.git",
+        "rules": [
+          "oscpackサブモジュールへの変更は、本家リポジトリにプッシュ権限がないので、ローカル変更のみ維持する",
+          "サブモジュール内の変更をコミットした後、メインリポジトリ（v8ui）でもコミットとプッシュが必要",
+          "型定義の修正（OscTypes.h）はaarm64/x86_64互換性のために行われた",
+          "build_universal.shとbuild_universal/はアーキテクチャ互換性のために追加・コミット可能"
+        ],
+        "commitProcess": [
+          "cd oscpack && git add [変更ファイル]",
+          "cd oscpack && git commit -m \"Issue XX: 変更内容\"",
+          "cd .. && git add oscpack",
+          "git commit -m \"Issue XX: oscpackサブモジュールの変更内容\"",
+          "git push [リモート] [ブランチ]"
+        ]
+      }
     },
     "issues": {
       "titleFormat": "タイトルは「Issue XX: 内容」の形式にすること（「Issue XX:」がプレフィックス）",
@@ -111,6 +130,17 @@
       "oscpackのライブラリパスは常に相対パスで指定する",
       "M4L環境では動的ポート割り当てを使用して衝突を避ける",
       "Issue 18ではarm64とx86_64の両方のアーキテクチャをサポートするユニバーサルバイナリを実装する必要がある"
-    ]
+    ],
+    "testFramework": {
+      "structure": [
+        "テストファイルは/tests/ディレクトリ内に配置する",
+        "Min-DevKit依存のないスタンドアロンテストは独立して実行可能にする",
+        "Issue 24ではテストフレームワークのMin-DevKit依存を分離予定"
+      ],
+      "naming": [
+        "テストファイル名は機能や目的を明確に示すこと（例：error_recovery_test.cpp）",
+        "テスト関数名はテスト対象と期待結果を表すこと"
+      ]
+    }
   }
 }
