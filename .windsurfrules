@@ -24,7 +24,7 @@
     "pullRequest": {
       "useToolOnly": true,
       "toolPath": "/Users/mymac/v8ui/tools/create_pr.py,
-      "warningMessage": "プルリクエストは必ず専用ツールを使用して作成してください。トークンは.envにある"
+      "warningMessage": "プルリクエストは必ず専用ツールを使用して作成してください。トークンはルートディレクトリの.envにある"
     },
     "branch": {
       "namingConvention": "feature/issue-{number}-{description}",
