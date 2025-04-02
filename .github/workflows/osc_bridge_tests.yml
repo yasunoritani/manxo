@@ -41,6 +41,12 @@ jobs:
             mkdir -p build && cd build
             cmake .. && make
           fi
+          
+          # ビルド成果物の確認
+          echo "::group::oscpack build verification"
+          find $GITHUB_WORKSPACE/oscpack -name "*.a" -o -name "*.lib" || echo "No libraries found"
+          ls -la $GITHUB_WORKSPACE/oscpack/build/ || echo "Build directory not found"
+          echo "::endgroup::"
       
       - name: Verify gitignore and protected files
         run: |
@@ -81,8 +87,20 @@ jobs:
         id: standalone_tests
         run: |
           echo "::group::Standalone Tests (Min-DevKit非依存)"
+          
+          # スクリプト実行前の診断情報
+          echo "環境変数の表示:"
+          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+          
+          # 明示的にCMakeから直接ビルドを試行
+          cd $GITHUB_WORKSPACE/src/min-devkit/osc_bridge
+          cmake -S . -B build -DBUILD_OSC_BRIDGE_STANDALONE_TESTS=ON -DCMAKE_VERBOSE_MAKEFILE=ON
+          cmake --build build
+          
+          # テスト実行
           chmod +x $GITHUB_WORKSPACE/run_tests.sh
           $GITHUB_WORKSPACE/run_tests.sh --standalone
+          
           echo "::endgroup::"
         continue-on-error: true
         
@@ -92,6 +110,22 @@ jobs:
           echo "従来のテスト: ${{ steps.legacy_tests.outcome == 'success' && '✅ 成功' || '❌ 失敗' }}"
           echo "スタンドアロンテスト: ${{ steps.standalone_tests.outcome == 'success' && '✅ 成功' || '❌ 失敗' }}"
           
+          # 詳細な診断情報（エラー時のトラブルシュート用）
+          if [[ "${{ steps.standalone_tests.outcome }}" != "success" ]]; then
+            echo "::group::スタンドアロンテスト詳細診断"
+            
+            echo "oscpackライブラリの検索:"
+            find $GITHUB_WORKSPACE -name "liboscpack.a" -o -name "oscpack.lib" || echo "No libraries found"
+            
+            echo "\nビルドディレクトリの内容:"
+            ls -la $GITHUB_WORKSPACE/src/min-devkit/osc_bridge/build/ || echo "Build directory listing failed"
+            
+            echo "\nテスト実行ファイルの検索:"
+            find $GITHUB_WORKSPACE/src/min-devkit/osc_bridge/build -name "test_osc_bridge_standalone" || echo "Test executable not found"
+            
+            echo "::endgroup::"
+          fi
+          
           # 少なくとも1つのテストセットが成功している場合は成功とする
           if [[ "${{ steps.legacy_tests.outcome }}" == "success" || "${{ steps.standalone_tests.outcome }}" == "success" ]]; then
             echo "少なくとも1つのテストセットが成功しました。"
@@ -99,6 +133,8 @@ jobs:
             echo "すべてのテストセットが失敗しました。"
             exit 1
           fi
+          
+          echo "::endgroup::"
           echo "::endgroup::"
       
       - name: Upload test results
