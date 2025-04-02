@@ -1,4 +1,7 @@
-name: OSC Bridge Tests
+name: LLM-Max MCP Integration via OSC Bridge Tests
+
+# このワークフローは、MCPプロトコルを使用してLLM（Claude Desktop）とMaxを連携させるための
+# OSC Bridge実装の品質を保証するためのものです。
 
 on:
   push:
@@ -7,74 +10,225 @@ on:
       - 'src/min-devkit/osc_bridge/**'
       - '.github/workflows/osc_bridge_tests.yml'
       - 'run_tests.sh'
-    # toolsディレクトリは明示的に除外する必要はない（.gitignoreで保護されていると仮定）
+      - 'oscpack/**'
   pull_request:
     branches: [ main ]
     paths:
       - 'src/min-devkit/osc_bridge/**'
       - 'run_tests.sh'
+      - 'oscpack/**'
 
 jobs:
+  critical-protection-check:
+    name: Critical Protection Verification
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      
+      - name: Verify Critical Protections
+        run: |
+          echo "🔒 プロジェクト保護状態の検証を開始します..."
+          
+          # /tools ディレクトリの重大な保護チェック（サブディレクトリも含む）
+          if [ -d "$GITHUB_WORKSPACE/tools" ] || find "$GITHUB_WORKSPACE" -type d -path "*/tools" | grep -q .; then
+            echo "❌ 致命的エラー: リポジトリに /tools ディレクトリまたはそのサブディレクトリが存在します！"
+            echo "このディレクトリは絶対にGitHubにアップロードしてはいけません。"
+            echo "検出されたツールディレクトリ:"
+            find "$GITHUB_WORKSPACE" -type d -path "*/tools" -o -path "*/tools/*"
+            exit 1
+          fi
+          
+          # .gitignoreの保護設定確認（複数の形式をチェック）
+          if ! grep -q "^/tools" $GITHUB_WORKSPACE/.gitignore && \
+             ! grep -q "^tools/" $GITHUB_WORKSPACE/.gitignore && \
+             ! grep -q "^tools$" $GITHUB_WORKSPACE/.gitignore; then
+            echo "❌ 致命的エラー: .gitignoreに/toolsディレクトリの保護設定がありません"
+            exit 1
+          fi
+          
+          # 機密ファイルのチェック（パターンベース）
+          echo "🔍 機密ファイルチェックを実行中..."
+          FOUND_SENSITIVE=$(find "$GITHUB_WORKSPACE" -type f -name ".*" -not -path "*/\.git/*" | grep -E '\.(env|.*rc|windsurfrules)$')
+          FOUND_CREDENTIALS=$(find "$GITHUB_WORKSPACE" -type f -not -path "*/\.git/*" | grep -E '(credential|token|secret|key)\..*')
+          
+          if [ ! -z "$FOUND_SENSITIVE" ] || [ ! -z "$FOUND_CREDENTIALS" ]; then
+            echo "❌ 致命的エラー: リポジトリに機密ファイルが存在する可能性があります"
+            [ ! -z "$FOUND_SENSITIVE" ] && echo "$FOUND_SENSITIVE"
+            [ ! -z "$FOUND_CREDENTIALS" ] && echo "$FOUND_CREDENTIALS"
+            exit 1
+          fi
+          
+          # .gitignoreでの基本的な除外確認
+          BASIC_PATTERNS=(".env" "*token*" "*secret*" "*key*" ".windsurfrules")
+          MISSING_EXCLUDES=0
+          
+          echo "🔍 .gitignore設定を確認中..."
+          for pattern in "${BASIC_PATTERNS[@]}"; do
+            if ! grep -q -E "$pattern" $GITHUB_WORKSPACE/.gitignore; then
+              echo "⚠️ 警告: $pattern パターンが.gitignoreで除外されていない可能性があります"
+              MISSING_EXCLUDES=1
+            fi
+          done
+          
+          if [ $MISSING_EXCLUDES -eq 1 ]; then
+            echo "⚠️ .gitignoreの修正をお勧めします"
+          fi
+          
+          # 機密情報のパターン検索
+          echo "🔍 機密情報パターンの検索..."
+          if grep -r "ghp_" --include="*.{js,py,sh,md,txt,json}" "$GITHUB_WORKSPACE" | grep -v ".git" | grep -q .; then
+            echo "❌ 致命的エラー: GitHubトークンパターンが検出されました！"
+            exit 1
+          fi
+          
+          # コミット履歴の検査
+          echo "📜 コミット履歴の検査..."
+          if git log --all --name-only | grep -E "^tools/|^/tools/|^tools$" | grep -q .; then
+            echo "⚠️ 重大な警告: コミット履歴に/toolsディレクトリが存在します"
+            echo "セキュリティのためにgit filter-branchまたはBFGを使用した履歴の浄化を検討してください"
+          fi
+          
+          echo "✅ 保護チェック完了: 重大な問題は検出されませんでした"
+          
   test:
     name: OSC Bridge Tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    needs: critical-protection-check
     strategy:
       fail-fast: false
       matrix:
         os: [macos-11, macos-latest]  # Intel MacとApple Silicon Macの両方をカバー
     
     steps:
-      - name: Check out repository
+      - name: Check out repository with submodules
         uses: actions/checkout@v3
+        with:
+          submodules: 'recursive'
+          fetch-depth: 0
+      
+      - name: Verify Project Integrity
+        run: |
+          echo "🔍 プロジェクト整合性の検証..."
+          
+          # 必須ファイルの存在確認（拡張）
+          REQUIRED_FILES=(
+            "$GITHUB_WORKSPACE/src/min-devkit/osc_bridge/CMakeLists.txt"
+            "$GITHUB_WORKSPACE/run_tests.sh"
+            "$GITHUB_WORKSPACE/oscpack/CMakeLists.txt"
+          )
+          
+          for file in "${REQUIRED_FILES[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "❌ エラー: 必須ファイル $file が見つかりません"
+              exit 1
+            fi
+          done
+          
+          # MCP関連の高度な検証
+          echo "🔬 MCP実装の詳細検証..."
+          
+          # キーワード検索（より包括的）
+          MCP_KEYWORDS=("MCP" "Model Context Protocol" "Claude Desktop" "LLM" "oscpack" "osc_bridge")
+          MCP_FILES_FOUND=0
+          
+          for keyword in "${MCP_KEYWORDS[@]}"; do
+            KEYWORD_COUNT=$(grep -r "$keyword" --include="*.{cpp,hpp,h,md,txt}" $GITHUB_WORKSPACE/src/min-devkit/osc_bridge | wc -l)
+            if [ "$KEYWORD_COUNT" -gt 0 ]; then
+              echo "✅ キーワード '$keyword' を $KEYWORD_COUNT 箇所で検出"
+              MCP_FILES_FOUND=1
+            fi
+          done
+          
+          # MCP特有のコード構造検証
+          MCP_HANDLER_EXISTS=0
+          if find "$GITHUB_WORKSPACE/src/min-devkit/osc_bridge" -name "*claude*.hpp" -o -name "*mcp*.hpp" | grep -q .; then
+            echo "✅ MCP/Claude関連のハンドラファイルを検出"
+            MCP_HANDLER_EXISTS=1
+          fi
+          
+          if [ "$MCP_FILES_FOUND" -eq 0 ] && [ "$MCP_HANDLER_EXISTS" -eq 0 ]; then
+            echo "⚠️ 警告: MCP関連の実装が見つかりません - プロジェクトのコア機能が不足している可能性があります"
+          fi
+          
+          # プロジェクト構造の検証
+          if [ ! -d "$GITHUB_WORKSPACE/src/min-devkit/osc_bridge" ]; then
+            echo "❌ エラー: OSC Bridgeの実装ディレクトリが見つかりません"
+            exit 1
+          fi
+          
+          # oscpackサブモジュールの確認（詳細）
+          if [ ! -d "$GITHUB_WORKSPACE/oscpack" ]; then
+            echo "❌ エラー: oscpackサブモジュールが見つかりません"
+            exit 1
+          else
+            # サブモジュールの正確なバージョン/状態を確認
+            cd "$GITHUB_WORKSPACE/oscpack"
+            echo "📊 oscpackサブモジュールの状態:"
+            git status --short
+            git log -1 --oneline
+          fi
+          
+          echo "✅ プロジェクト整合性の検証完了"
       
       - name: Install dependencies
         run: |
+          echo "📦 依存関係のインストール..."
           brew install cmake
           
           # oscpackのユニバーサルビルド
+          echo "🔨 oscpackのビルドを開始..."
           cd $GITHUB_WORKSPACE/oscpack
           if [ -f "./build_universal.sh" ]; then
             chmod +x ./build_universal.sh
             ./build_universal.sh
+            echo "✅ oscpackのユニバーサルビルド完了"
           else
-            echo "Warning: build_universal.sh not found, using default build"
+            echo "⚠️ 警告: build_universal.sh が見つからないため、デフォルトビルドを使用します"
             mkdir -p build && cd build
             cmake .. && make
+            echo "✅ oscpackのデフォルトビルド完了"
           fi
-      
-      - name: Verify gitignore and protected files
-        run: |
-          # toolsディレクトリのチェック
-          if [ -d "$GITHUB_WORKSPACE/tools" ]; then
-            echo "⚠️ Warning: tools directory found - checking .gitignore settings..."
-            if grep -q "^/tools" $GITHUB_WORKSPACE/.gitignore || grep -q "^tools/" $GITHUB_WORKSPACE/.gitignore; then
-              echo "✅ tools directory is properly excluded in .gitignore"
-            else
-              echo "❌ ERROR: tools directory is not properly excluded in .gitignore"
-              exit 1
-            fi
+          
+          # ビルド成果物の確認
+          if [ -f "$GITHUB_WORKSPACE/oscpack/build_universal/liboscpack.a" ]; then
+            echo "✅ ユニバーサルバイナリが正常にビルドされました"
+            file $GITHUB_WORKSPACE/oscpack/build_universal/liboscpack.a
+          elif [ -f "$GITHUB_WORKSPACE/oscpack/build/liboscpack.a" ]; then
+            echo "⚠️ 警告: デフォルトビルドのみが存在します - アーキテクチャの互換性に問題がある可能性があります"
+            file $GITHUB_WORKSPACE/oscpack/build/liboscpack.a
           else
-            echo "ℹ️ No tools directory found in workspace - skipping check"
+            echo "❌ エラー: oscpackのビルドに失敗しました"
+            exit 1
           fi
-
-          # 機密ファイルの.gitignoreチェック
-          echo "Checking .gitignore for sensitive files..."
-          SENSITIVE_FILES=(".env" ".env.local" ".env.*.local" ".windsurfrules")
-          for file in "${SENSITIVE_FILES[@]}"; do
-            if ! grep -q "$file" $GITHUB_WORKSPACE/.gitignore; then
-              echo "⚠️ Warning: $file is not excluded in .gitignore"
-            else
-              echo "✅ $file is properly excluded in .gitignore"
-            fi
-          done
+          
+      - name: Create Test Output Directory
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/docs/test_results"
+          mkdir -p "$GITHUB_WORKSPACE/logs"
+          echo "📁 テスト出力ディレクトリを作成しました"
       
       - name: Build and Run Legacy Tests
         id: legacy_tests
         run: |
           echo "::group::Legacy Tests (Min-DevKit依存)"
           chmod +x $GITHUB_WORKSPACE/run_tests.sh
-          $GITHUB_WORKSPACE/run_tests.sh --legacy
+          
+          # 詳細なログ出力を保存
+          $GITHUB_WORKSPACE/run_tests.sh --legacy --verbose 2>&1 | tee "$GITHUB_WORKSPACE/logs/legacy_tests_$(date +%Y%m%d_%H%M%S).log"
+          TEST_EXIT_CODE=${PIPESTATUS[0]}
+          
+          # テスト内容のサマリーを生成（利用可能な場合）
+          if [ -f "$GITHUB_WORKSPACE/build/test-results/legacy_summary.txt" ]; then
+            cp "$GITHUB_WORKSPACE/build/test-results/legacy_summary.txt" "$GITHUB_WORKSPACE/docs/test_results/"
+          else
+            echo "テスト結果: 終了コード $TEST_EXIT_CODE" > "$GITHUB_WORKSPACE/docs/test_results/legacy_summary_$(date +%Y%m%d_%H%M%S).txt"
+          fi
+          
           echo "::endgroup::"
+          exit $TEST_EXIT_CODE
         continue-on-error: true
         
       - name: Build and Run Standalone Tests
@@ -82,31 +236,83 @@ jobs:
         run: |
           echo "::group::Standalone Tests (Min-DevKit非依存)"
           chmod +x $GITHUB_WORKSPACE/run_tests.sh
-          $GITHUB_WORKSPACE/run_tests.sh --standalone
+          
+          # 詳細なログ出力を保存
+          $GITHUB_WORKSPACE/run_tests.sh --standalone --verbose 2>&1 | tee "$GITHUB_WORKSPACE/logs/standalone_tests_$(date +%Y%m%d_%H%M%S).log"
+          TEST_EXIT_CODE=${PIPESTATUS[0]}
+          
+          # テスト内容のサマリーを生成（利用可能な場合）
+          if [ -f "$GITHUB_WORKSPACE/build/test-results/standalone_summary.txt" ]; then
+            cp "$GITHUB_WORKSPACE/build/test-results/standalone_summary.txt" "$GITHUB_WORKSPACE/docs/test_results/"
+          else 
+            echo "テスト結果: 終了コード $TEST_EXIT_CODE" > "$GITHUB_WORKSPACE/docs/test_results/standalone_summary_$(date +%Y%m%d_%H%M%S).txt"
+          fi
+          
           echo "::endgroup::"
+          exit $TEST_EXIT_CODE
         continue-on-error: true
         
-      - name: Check Test Results
+      - name: Check Test Results and Collect Diagnostics
         run: |
-          echo "::group::テスト結果の確認"
+          echo "::group::テスト結果の確認と診断情報の収集"
           echo "従来のテスト: ${{ steps.legacy_tests.outcome == 'success' && '✅ 成功' || '❌ 失敗' }}"
           echo "スタンドアロンテスト: ${{ steps.standalone_tests.outcome == 'success' && '✅ 成功' || '❌ 失敗' }}"
           
+          # テスト失敗時の詳細診断情報を収集
+          if [[ "${{ steps.legacy_tests.outcome }}" != "success" || "${{ steps.standalone_tests.outcome }}" != "success" ]]; then
+            echo "🔍 診断情報の収集..."
+            
+            # システム情報
+            echo "\n--- システム情報 ---" > "$GITHUB_WORKSPACE/logs/diagnostics_$(date +%Y%m%d_%H%M%S).log"
+            uname -a >> "$GITHUB_WORKSPACE/logs/diagnostics_$(date +%Y%m%d_%H%M%S).log"
+            sw_vers >> "$GITHUB_WORKSPACE/logs/diagnostics_$(date +%Y%m%d_%H%M%S).log" 2>/dev/null || true
+            
+            # CMake情報
+            echo "\n--- CMake情報 ---" >> "$GITHUB_WORKSPACE/logs/diagnostics_$(date +%Y%m%d_%H%M%S).log"
+            cmake --version >> "$GITHUB_WORKSPACE/logs/diagnostics_$(date +%Y%m%d_%H%M%S).log"
+            
+            # ビルド成果物の確認
+            echo "\n--- ビルド成果物 ---" >> "$GITHUB_WORKSPACE/logs/diagnostics_$(date +%Y%m%d_%H%M%S).log"
+            find "$GITHUB_WORKSPACE/build" -type f -name "*.a" -o -name "*.o" -o -name "*.dylib" | \
+              sort >> "$GITHUB_WORKSPACE/logs/diagnostics_$(date +%Y%m%d_%H%M%S).log"
+            
+            # 依存関係の確認
+            echo "\n--- oscpack依存関係 ---" >> "$GITHUB_WORKSPACE/logs/diagnostics_$(date +%Y%m%d_%H%M%S).log"
+            if [ -f "$GITHUB_WORKSPACE/oscpack/build_universal/liboscpack.a" ]; then
+              file "$GITHUB_WORKSPACE/oscpack/build_universal/liboscpack.a" >> "$GITHUB_WORKSPACE/logs/diagnostics_$(date +%Y%m%d_%H%M%S).log"
+            elif [ -f "$GITHUB_WORKSPACE/oscpack/build/liboscpack.a" ]; then
+              file "$GITHUB_WORKSPACE/oscpack/build/liboscpack.a" >> "$GITHUB_WORKSPACE/logs/diagnostics_$(date +%Y%m%d_%H%M%S).log"
+            fi
+            
+            # リンクの問題を診断
+            echo "\n--- リンク診断 ---" >> "$GITHUB_WORKSPACE/logs/diagnostics_$(date +%Y%m%d_%H%M%S).log"
+            find "$GITHUB_WORKSPACE/build" -name "CMakeError.log" -exec cat {} \; >> "$GITHUB_WORKSPACE/logs/diagnostics_$(date +%Y%m%d_%H%M%S).log" 2>/dev/null || true
+            
+            echo "診断情報を $GITHUB_WORKSPACE/logs/diagnostics_$(date +%Y%m%d_%H%M%S).log に保存しました"
+          fi
+          
           # 少なくとも1つのテストセットが成功している場合は成功とする
           if [[ "${{ steps.legacy_tests.outcome }}" == "success" || "${{ steps.standalone_tests.outcome }}" == "success" ]]; then
-            echo "少なくとも1つのテストセットが成功しました。"
+            echo "✅ 少なくとも1つのテストセットが成功しました。"
           else
-            echo "すべてのテストセットが失敗しました。"
+            echo "❌ すべてのテストセットが失敗しました。"
+            # 診断サマリーを作成
+            echo "テスト失敗の主な原因を診断中..."
+            grep -i "error" "$GITHUB_WORKSPACE/logs/"*.log | head -n 10 || true
             exit 1
           fi
           echo "::endgroup::"
       
-      - name: Upload test results
+      - name: Upload test results and diagnostics
         if: always()
         uses: actions/upload-artifact@v3
         with:
-          name: test-results-${{ matrix.os }}
-          path: ${{ github.workspace }}/docs/test_results/
+          name: test-results-diagnostics-${{ matrix.os }}
+          path: |
+            ${{ github.workspace }}/docs/test_results/
+            ${{ github.workspace }}/logs/
+            ${{ github.workspace }}/build/test-results/
+            ${{ github.workspace }}/build/Testing/
           retention-days: 14
           # 機密ファイルは除外
           exclude: |
@@ -116,6 +322,10 @@ jobs:
             **/secure_config/**
             **/private/**
             **/credentials/**
+            **/*token*
+            **/*password*
+            **/*secret*
+            **/*.key
       
       - name: Post test results comment
         if: github.event_name == 'pull_request'
