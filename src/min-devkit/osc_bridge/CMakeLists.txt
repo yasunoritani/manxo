@@ -26,6 +26,13 @@ if (NOT DEFINED C74_MIN_API_DIR)
     endif()
 endif()
 
+# LLM-Max MCP連携プロジェクトのバージョン情報
+set(OSC_BRIDGE_VERSION_MAJOR 1)
+set(OSC_BRIDGE_VERSION_MINOR 1)
+set(OSC_BRIDGE_VERSION_PATCH 0)
+set(OSC_BRIDGE_VERSION "${OSC_BRIDGE_VERSION_MAJOR}.${OSC_BRIDGE_VERSION_MINOR}.${OSC_BRIDGE_VERSION_PATCH}")
+message(STATUS "Building OSC Bridge v${OSC_BRIDGE_VERSION} for LLM-Max MCP Integration")
+
 # Min-DevKitの構成スクリプトをインクルード
 include(${C74_MIN_API_DIR}/script/min-pretarget.cmake)
 
@@ -36,11 +43,15 @@ include(${C74_MIN_API_DIR}/script/min-pretarget.cmake)
 # includeディレクトリ設定
 include_directories( 
 	"${C74_INCLUDES}"
+	"${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
 # ソースファイル設定 - Issue 19: Min-DevKitヘッダーの重複インクルード対応
 # Min-DevKitの設計思想に従い、単一ファイル方式を采用する
 # Min-DevKitヘッダー(c74_min.h)は各ソースファイルで一度だけインクルードされる必要がある
+
+# Issue 27: WebSocket対応と LLM-Max MCP 連携の実装
+# WebSocketクライアント/サーバー機能を追加し、MCPプロトコルをサポート
 set(SOURCE_FILES
 	osc_bridge.cpp
 )
@@ -136,6 +147,62 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
 
 # Min-DevKitの後処理スクリプトを実行
 include(${C74_MIN_API_DIR}/script/min-posttarget.cmake)
+
+#############################################################
+# WebSocketサポートの設定
+#############################################################
+
+# Issue 27: WebSocket対応の構成
+message(STATUS "Configuring WebSocket support for LLM-Max MCP Integration")
+
+# WebSocket実装オプション
+option(LWS_USE_EXTERNAL_IMPLEMENTATION "Use external WebSocket implementation" ON)
+
+# JSONライブラリの探索
+find_package(PkgConfig REQUIRED)
+find_package(nlohmann_json QUIET)
+if(NOT nlohmann_json_FOUND)
+    pkg_check_modules(NLOHMANN_JSON REQUIRED nlohmann_json)
+    if(NLOHMANN_JSON_FOUND)
+        message(STATUS "Found nlohmann-json via pkg-config: ${NLOHMANN_JSON_VERSION}")
+        include_directories(${NLOHMANN_JSON_INCLUDE_DIRS})
+    else()
+        message(FATAL_ERROR "nlohmann-jsonが見つかりません。brew install nlohmann-jsonでインストールしてください。")
+    endif()
+else()
+    message(STATUS "Found nlohmann-json via find_package")
+endif()
+
+# \u30d8\u30c3\u30c0\u30fc\u30a4\u30f3\u30af\u30eb\u30fc\u30c9\u30c7\u30a3\u30ec\u30af\u30c8\u30ea\u3092\u8ffd\u52a0
+target_include_directories(${PROJECT_NAME} PRIVATE "/opt/homebrew/include")
+
+# OSCメッセージをJSON化してWebSocket経由で送信する実装に切り替え
+# ネイティブのWebSocketの代わりに外部インターフェースを使用
+message(STATUS "Using native OSC over JSON for WebSocket MCP support")
+
+# WebSocketヘッダーファイルのリスト
+set(WEBSOCKET_HEADERS
+    "${CMAKE_CURRENT_SOURCE_DIR}/mcp.websocket_client.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/mcp.websocket_server.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/mcp.websocket_mcp_handler.hpp"
+)
+
+# WebSocketヘッダーの存在確認
+foreach(HEADER ${WEBSOCKET_HEADERS})
+    if(EXISTS "${HEADER}")
+        message(STATUS "Found WebSocket header: ${HEADER}")
+    else()
+        message(WARNING "WebSocket header not found: ${HEADER}")
+    endif()
+endforeach()
+
+# ソースファイルにWebSocketヘッダーを関連付け
+set_source_files_properties(${SOURCE_FILES} PROPERTIES OBJECT_DEPENDS "${WEBSOCKET_HEADERS}")
+
+# 追加コンパイル定義
+set_target_properties(${PROJECT_NAME} PROPERTIES
+    COMPILE_DEFINITIONS "MCP_WEBSOCKET_SUPPORT=1;MCP_VERSION=\"${OSC_BRIDGE_VERSION}\";LWS_LIBRARY_VERSION=\"${LIBWEBSOCKETS_VERSION}\""
+)
 
 #############################################################
 # テスト環境（Issue 24: Min-DevKit依存分離）
