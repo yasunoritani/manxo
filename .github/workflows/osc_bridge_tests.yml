@@ -49,33 +49,25 @@ jobs:
             exit 1
           fi
           
-          # 機密ファイルのチェック（パターンベース）
-          echo "🔍 機密ファイルチェックを実行中..."
-          FOUND_SENSITIVE=$(find "$GITHUB_WORKSPACE" -type f -name ".*" -not -path "*/\.git/*" | grep -E '\.(env|.*rc|windsurfrules)$')
-          FOUND_CREDENTIALS=$(find "$GITHUB_WORKSPACE" -type f -not -path "*/\.git/*" | grep -E '(credential|token|secret|key)\..*')
+          # 特定のパターンに合致するファイルを検出
+          echo "🔍 セキュリティチェックを実行中..."
+          FOUND_DOTFILES=$(find "$GITHUB_WORKSPACE" -type f -name ".*" -not -path "*/\.git/*" | grep -v "\.gitignore")
+          FOUND_SUSPICIOUS=$(find "$GITHUB_WORKSPACE" -type f -not -path "*/\.git/*" | grep -E '(credential|token|secret|key|password)')
           
-          if [ ! -z "$FOUND_SENSITIVE" ] || [ ! -z "$FOUND_CREDENTIALS" ]; then
-            echo "❌ 致命的エラー: リポジトリに機密ファイルが存在する可能性があります"
-            [ ! -z "$FOUND_SENSITIVE" ] && echo "$FOUND_SENSITIVE"
-            [ ! -z "$FOUND_CREDENTIALS" ] && echo "$FOUND_CREDENTIALS"
+          if [ ! -z "$FOUND_DOTFILES" ] || [ ! -z "$FOUND_SUSPICIOUS" ]; then
+            echo "❌ セキュリティ警告: 検討が必要なファイルが見つかりました"
+            [ ! -z "$FOUND_DOTFILES" ] && echo "$FOUND_DOTFILES"
+            [ ! -z "$FOUND_SUSPICIOUS" ] && echo "$FOUND_SUSPICIOUS"
             exit 1
           fi
           
-          # .gitignoreでの基本的な除外確認
-          BASIC_PATTERNS=(".env" "*token*" "*secret*" "*key*" ".windsurfrules")
-          MISSING_EXCLUDES=0
-          
-          echo "🔍 .gitignore設定を確認中..."
-          for pattern in "${BASIC_PATTERNS[@]}"; do
-            if ! grep -q -E "$pattern" $GITHUB_WORKSPACE/.gitignore; then
-              echo "⚠️ 警告: $pattern パターンが.gitignoreで除外されていない可能性があります"
-              MISSING_EXCLUDES=1
-            fi
-          done
-          
-          if [ $MISSING_EXCLUDES -eq 1 ]; then
-            echo "⚠️ .gitignoreの修正をお勧めします"
+          # .gitignoreが存在するか確認
+          if [ ! -f "$GITHUB_WORKSPACE/.gitignore" ]; then
+            echo "❌ エラー: .gitignoreファイルが存在しません"
+            exit 1
           fi
+          
+          echo "✅ セキュリティチェック完了"
           
           # 機密情報のパターン検索
           echo "🔍 機密情報パターンの検索..."
