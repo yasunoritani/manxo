@@ -1,6 +1,7 @@
 #include <catch2/catch.hpp>
 #include "mocks/osc_interface.hpp"
 #include "mocks/osc_mock.hpp"
+#include "mocks/test_utilities.hpp"
 
 #include <random>
 #include <thread>
@@ -8,13 +9,7 @@
 #include <vector>
 #include <string>
 
-// テスト用補助関数
-int random_port(int min, int max) {
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
-    std::uniform_int_distribution<> distrib(min, max);
-    return distrib(gen);
-}
+// mcp::osc::test::random_portを使用
 
 // エラー回復のテスト
 SCENARIO("Error Recovery Tests with Mock Implementation") {
@@ -23,7 +18,7 @@ SCENARIO("Error Recovery Tests with Mock Implementation") {
         // クライアント設定
         mcp::osc::connection_config config;
         config.host = "localhost";
-        config.port_out = random_port(50000, 55000);
+        config.port_out = mcp::osc::test::random_port(50000, 55000);
         config.dynamic_ports = true;
         config.m4l_compatibility = true;
         
@@ -90,8 +85,8 @@ SCENARIO("Error Recovery Tests with Mock Implementation") {
         // ブリッジ設定
         mcp::osc::connection_config config;
         config.host = "localhost";
-        config.port_in = random_port(51000, 52000);
-        config.port_out = random_port(52001, 53000);
+        config.port_in = mcp::osc::test::random_port(51000, 52000);
+        config.port_out = mcp::osc::test::random_port(52001, 53000);
         
         // モックブリッジの作成
         auto bridge = std::make_unique<mcp::osc::mock::bridge>();

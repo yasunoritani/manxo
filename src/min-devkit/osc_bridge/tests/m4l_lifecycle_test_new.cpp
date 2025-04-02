@@ -1,6 +1,7 @@
 #include <catch2/catch.hpp>
 #include "mocks/osc_interface.hpp"
 #include "mocks/osc_mock.hpp"
+#include "mocks/test_utilities.hpp"
 
 #include <string>
 #include <vector>
@@ -8,13 +9,7 @@
 #include <chrono>
 #include <random>
 
-// ランダムポート生成用ヘルパー関数
-int random_port(int min, int max) {
-    static std::random_device rd;
-    static std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dist(min, max);
-    return dist(gen);
-}
+// mcp::osc::test::random_portを使用
 
 // M4Lライフサイクルイベントのテスト
 SCENARIO("M4L Lifecycle Event Tests") {
@@ -35,7 +30,7 @@ SCENARIO("M4L Lifecycle Event Tests") {
         });
         
         // ポート設定
-        int server_port = random_port(50000, 55000);
+        int server_port = mcp::osc::test::random_port(50000, 55000);
         std::string host = "localhost";
         
         // ブリッジを接続
