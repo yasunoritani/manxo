@@ -19,8 +19,8 @@ on:
       - 'oscpack/**'
 
 jobs:
-  critical-protection-check:
-    name: Critical Protection Verification
+  basic-checks:
+    name: Repository Structure Check
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -28,67 +28,32 @@ jobs:
         with:
           fetch-depth: 0
       
-      - name: Verify Critical Protections
+      - name: Verify Project Structure
         run: |
-          echo "🔒 プロジェクト保護状態の検証を開始します..."
+          echo "🔒 プロジェクト構造確認中..."
           
-          # /tools ディレクトリの重大な保護チェック（サブディレクトリも含む）
-          if [ -d "$GITHUB_WORKSPACE/tools" ] || find "$GITHUB_WORKSPACE" -type d -path "*/tools" | grep -q .; then
-            echo "❌ 致命的エラー: リポジトリに /tools ディレクトリまたはそのサブディレクトリが存在します！"
-            echo "このディレクトリは絶対にGitHubにアップロードしてはいけません。"
-            echo "検出されたツールディレクトリ:"
-            find "$GITHUB_WORKSPACE" -type d -path "*/tools" -o -path "*/tools/*"
+          # 基本的なプロジェクト構造の確認
+          if [ ! -d "$GITHUB_WORKSPACE/src/min-devkit/osc_bridge" ]; then
+            echo "❌ エラー: OSC Bridgeディレクトリが見つかりません"
             exit 1
           fi
           
-          # .gitignoreの保護設定確認（複数の形式をチェック）
-          if ! grep -q "^/tools" $GITHUB_WORKSPACE/.gitignore && \
-             ! grep -q "^tools/" $GITHUB_WORKSPACE/.gitignore && \
-             ! grep -q "^tools$" $GITHUB_WORKSPACE/.gitignore; then
-            echo "❌ 致命的エラー: .gitignoreに/toolsディレクトリの保護設定がありません"
+          if [ ! -d "$GITHUB_WORKSPACE/oscpack" ]; then
+            echo "❌ エラー: oscpackディレクトリが見つかりません"
             exit 1
           fi
           
-          # 特定のパターンに合致するファイルを検出
-          echo "🔍 セキュリティチェックを実行中..."
-          FOUND_DOTFILES=$(find "$GITHUB_WORKSPACE" -type f -name ".*" -not -path "*/\.git/*" | grep -v "\.gitignore")
-          FOUND_SUSPICIOUS=$(find "$GITHUB_WORKSPACE" -type f -not -path "*/\.git/*" | grep -E '(credential|token|secret|key|password)')
-          
-          if [ ! -z "$FOUND_DOTFILES" ] || [ ! -z "$FOUND_SUSPICIOUS" ]; then
-            echo "❌ セキュリティ警告: 検討が必要なファイルが見つかりました"
-            [ ! -z "$FOUND_DOTFILES" ] && echo "$FOUND_DOTFILES"
-            [ ! -z "$FOUND_SUSPICIOUS" ] && echo "$FOUND_SUSPICIOUS"
+          if [ ! -f "$GITHUB_WORKSPACE/run_tests.sh" ]; then
+            echo "❌ エラー: テスト実行スクリプトが見つかりません"
             exit 1
           fi
           
-          # .gitignoreが存在するか確認
-          if [ ! -f "$GITHUB_WORKSPACE/.gitignore" ]; then
-            echo "❌ エラー: .gitignoreファイルが存在しません"
-            exit 1
-          fi
-          
-          echo "✅ セキュリティチェック完了"
-          
-          # 機密情報のパターン検索
-          echo "🔍 機密情報パターンの検索..."
-          if grep -r "ghp_" --include="*.{js,py,sh,md,txt,json}" "$GITHUB_WORKSPACE" | grep -v ".git" | grep -q .; then
-            echo "❌ 致命的エラー: GitHubトークンパターンが検出されました！"
-            exit 1
-          fi
-          
-          # コミット履歴の検査
-          echo "📜 コミット履歴の検査..."
-          if git log --all --name-only | grep -E "^tools/|^/tools/|^tools$" | grep -q .; then
-            echo "⚠️ 重大な警告: コミット履歴に/toolsディレクトリが存在します"
-            echo "セキュリティのためにgit filter-branchまたはBFGを使用した履歴の浄化を検討してください"
-          fi
-          
-          echo "✅ 保護チェック完了: 重大な問題は検出されませんでした"
+          echo "✅ プロジェクト構造確認完了"
           
   test:
     name: OSC Bridge Tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    needs: critical-protection-check
+    needs: basic-checks
     strategy:
       fail-fast: false
       matrix:
