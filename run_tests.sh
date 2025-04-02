@@ -19,7 +19,24 @@
 set -e
 
 # 設定
-PROJECT_ROOT="/Users/mymac/v8ui"
+# CI環境（GitHub Actions）では$GITHUB_WORKSPACEが利用可能
+# ローカル環境では自動検出またはデフォルト値を使用
+if [ -n "$GITHUB_WORKSPACE" ]; then
+    # GitHub Actions環境の場合
+    PROJECT_ROOT="$GITHUB_WORKSPACE"
+else 
+    # スクリプトパスから自動検出を試みる
+    SCRIPT_PATH="$(cd "$(dirname "$0")" && pwd)"
+    if [ -d "$SCRIPT_PATH/src/min-devkit/osc_bridge" ]; then
+        PROJECT_ROOT="$SCRIPT_PATH"
+    else
+        # 前方互換性のためのデフォルト値
+        PROJECT_ROOT="/Users/mymac/v8ui"
+        # 警告表示
+        echo "\033[33m警告: プロジェクトルートを自動検出できません。デフォルト値を使用します: $PROJECT_ROOT\033[0m"
+    fi
+fi
+
 BUILD_DIR="${PROJECT_ROOT}/src/min-devkit/osc_bridge/build"
 TEST_RESULTS_DIR="${PROJECT_ROOT}/docs/test_results"
 DATE_STAMP=$(date +"%Y%m%d_%H%M%S")
