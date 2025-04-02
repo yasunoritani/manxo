@@ -30,3 +30,4 @@ npm-debug.log*
 # 以下の行は不要ですが参考として残しておきます
 # tools/secure/
 # tools/private/
+.windsurfrules

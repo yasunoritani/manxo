@@ -65,6 +65,14 @@ jobs:
           name: test-results-${{ matrix.os }}
           path: ${{ github.workspace }}/docs/test_results/
           retention-days: 14
+          # 以下の機密ファイルを絶対に含めない
+          exclude: |
+            **/.env*
+            **/.windsurfrules
+            **/tools/**
+            **/secure_config/**
+            **/private/**
+            **/credentials/**
       
       - name: Post test results comment
         if: github.event_name == 'pull_request'
