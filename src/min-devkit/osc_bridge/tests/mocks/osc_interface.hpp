@@ -95,7 +95,7 @@ public:
     }
     
     // 型情報の取得
-    std::string get_type(size_t index) const {
+    virtual std::string get_type(size_t index) const {
         return index < types.size() ? types[index] : "";
     }
     
