@@ -2,6 +2,7 @@
 .env
 .env.local
 .env.*.local
+.windsurfrules
 
 # ビルド成果物
 build/
