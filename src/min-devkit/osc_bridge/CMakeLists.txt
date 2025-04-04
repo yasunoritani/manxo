@@ -52,25 +52,54 @@ include_directories(
 
 # Issue 27: WebSocket対応と LLM-Max MCP 連携の実装
 # WebSocketクライアント/サーバー機能を追加し、MCPプロトコルをサポート
-set(SOURCE_FILES
-	osc_bridge.cpp
+
+# 重複シンボル問題を避けるために個別の外部オブジェクトとしてビルド
+
+# 1. OSC Bridge外部オブジェクト
+add_library(
+    ${PROJECT_NAME}
+    MODULE
+    osc_bridge.cpp
 )
 
-# ライブラリの定義
-add_library( 
-	${PROJECT_NAME} 
-	MODULE
-	${SOURCE_FILES}
+# 2. LLM MCP外部オブジェクト
+add_library(
+    llm_mcp
+    MODULE
+    llm.mcp.cpp
+)
+
+# llm_mcpの出力先を設定
+set_target_properties(llm_mcp PROPERTIES
+    FOLDER "Externals"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/../../../externals"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/../../../externals"
+    SUFFIX ".mxo"
+    PREFIX ""
+)
+
+# PkgInfoファイルを手動で生成してコピーする
+add_custom_command(TARGET llm_mcp POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/../../../externals/llm.mcp.mxo/Contents"
+    COMMAND echo "BNDL????〜" > "${CMAKE_SOURCE_DIR}/../../../externals/llm.mcp.mxo/Contents/PkgInfo"
+    COMMENT "Creating PkgInfo file for llm.mcp.mxo"
 )
 
 # C++17を有効化
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# 両方のターゲットに明示的にC++17を設定
+set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 17)
+set_property(TARGET llm_mcp PROPERTY CXX_STANDARD 17)
+
 # macOS固有の設定
 if(APPLE)
-    # ユニバーサルバイナリ（arm64とx86_64の両方）をサポート
-    set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "Build architectures for Mac OS X" FORCE)
+    # テスト用に一時的にarm64のみにする
+    # 注意: Issue 18ではユニバーサルバイナリサポートが必要
+    # テスト完了後に元に戻す必要あり
+    set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE STRING "Build architectures for Mac OS X" FORCE)
+    message(STATUS "テスト用に現在arm64のみをビルドしています")
     
     # Max 8.2+に対応したデプロイメントターゲット
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum OS X deployment version" FORCE)
@@ -124,15 +153,25 @@ if(DEFINED OSCPACK_LIB)
         message(WARNING "Run 'oscpack/build_universal.sh' to create a universal binary.")
     endif()
     
+    # 両方のターゲットにOSCpackをリンク
     target_link_libraries(${PROJECT_NAME} PUBLIC "${OSCPACK_LIB}")
+    target_link_libraries(llm_mcp PUBLIC "${OSCPACK_LIB}")
 else()
     message(STATUS "Using generic oscpack library")
     target_link_libraries(${PROJECT_NAME} PUBLIC "oscpack")
+    target_link_libraries(llm_mcp PUBLIC "oscpack")
 endif()
 
 # macOS固有のリンクオプション
 if(APPLE)
+    # OSC Bridge用のフレームワークリンク
     target_link_libraries(${PROJECT_NAME} PUBLIC
+        "-framework CoreFoundation"
+        "-framework CoreAudio"
+    )
+    
+    # LLM MCP用のフレームワークリンク
+    target_link_libraries(llm_mcp PUBLIC
         "-framework CoreFoundation"
         "-framework CoreAudio"
     )
@@ -145,40 +184,154 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE
     NOMINMAX
 )
 
-# Min-DevKitの後処理スクリプトを実行
+# osc_bridge向けのMin-DevKitの後処理スクリプトを実行
 include(${C74_MIN_API_DIR}/script/min-posttarget.cmake)
+
+# llm_mcp向けの後処理
+# 現在のproject nameを保存
+set(CURRENT_PROJECT ${PROJECT_NAME})
+# 一時的にllm_mcpをプロジェクト名に設定
+set(PROJECT_NAME llm_mcp)
+
+# llm_mcpのバンドル設定を拡張 (よりシンプルな設定に変更)
+set_target_properties(llm_mcp PROPERTIES
+    BUNDLE TRUE
+    BUNDLE_EXTENSION "mxo"
+    OUTPUT_NAME "llm.mcp"
+    PREFIX ""
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/../../../externals"
+    MACOSX_BUNDLE TRUE
+    MACOSX_BUNDLE_BUNDLE_NAME "llm.mcp"
+)
+
+# llm_mcpターゲットに必要な追加ライブラリをリンク
+target_link_libraries(llm_mcp PRIVATE
+    ${CMAKE_THREAD_LIBS_INIT}
+    "${LIBWEBSOCKETS_LIB}"
+)
+
+# アーキテクチャ固有の設定を追加
+if(APPLE)
+    # リンクエラーを避けるために必要なフラグを追加
+    target_link_options(llm_mcp PRIVATE
+        "-Wl,-undefined,dynamic_lookup"
+    )
+    
+    # シンボルが見つからない場合にエラーを出さないようにする
+    set_target_properties(llm_mcp PROPERTIES 
+        LINK_FLAGS "-Wl,-flat_namespace,-undefined,suppress"
+    )
+endif()
+
+# LLM MCP用のコンパイル定義を設定
+set_target_properties(llm_mcp PROPERTIES
+    COMPILE_DEFINITIONS "MCP_WEBSOCKET_SUPPORT=1;MCP_VERSION=\"${OSC_BRIDGE_VERSION}\";LWS_LIBRARY_VERSION=\"${LIBWEBSOCKETS_VERSION}\""
+)
+
+# 元のプロジェクト名を復元
+set(PROJECT_NAME ${CURRENT_PROJECT})
 
 #############################################################
 # WebSocketサポートの設定
 #############################################################
 
-# Issue 27: WebSocket対応の構成
+# WebSocketサポートの設定
 message(STATUS "Configuring WebSocket support for LLM-Max MCP Integration")
 
-# WebSocket実装オプション
-option(LWS_USE_EXTERNAL_IMPLEMENTATION "Use external WebSocket implementation" ON)
+# ビルドアーキテクチャの検出
+set(CURRENT_ARCH ${CMAKE_SYSTEM_PROCESSOR})
+message(STATUS "Current architecture: ${CURRENT_ARCH}")
 
-# JSONライブラリの探索
+# WebSocketライブラリの依存関係を検索
 find_package(PkgConfig REQUIRED)
+
+# nlohmann-jsonライブラリを検索
 find_package(nlohmann_json QUIET)
-if(NOT nlohmann_json_FOUND)
-    pkg_check_modules(NLOHMANN_JSON REQUIRED nlohmann_json)
-    if(NLOHMANN_JSON_FOUND)
-        message(STATUS "Found nlohmann-json via pkg-config: ${NLOHMANN_JSON_VERSION}")
-        include_directories(${NLOHMANN_JSON_INCLUDE_DIRS})
-    else()
-        message(FATAL_ERROR "nlohmann-jsonが見つかりません。brew install nlohmann-jsonでインストールしてください。")
-    endif()
-else()
+if(nlohmann_json_FOUND)
     message(STATUS "Found nlohmann-json via find_package")
+else()
+    find_path(NLOHMANN_JSON_INCLUDE_DIRS nlohmann/json.hpp
+        PATH_SUFFIXES include
+        PATHS
+            /usr/local
+            /usr
+            /opt
+            /opt/homebrew
+    )
+    if(NLOHMANN_JSON_INCLUDE_DIRS)
+        message(STATUS "Found nlohmann-json include directory: ${NLOHMANN_JSON_INCLUDE_DIRS}")
+    else()
+        message(FATAL_ERROR "nlohmann-json library not found, please install it using your package manager")
+    endif()
 endif()
 
-# \u30d8\u30c3\u30c0\u30fc\u30a4\u30f3\u30af\u30eb\u30fc\u30c9\u30c7\u30a3\u30ec\u30af\u30c8\u30ea\u3092\u8ffd\u52a0
+# ヘッダーインクルードディレクトリを追加
 target_include_directories(${PROJECT_NAME} PRIVATE "/opt/homebrew/include")
+target_include_directories(llm_mcp PRIVATE "/opt/homebrew/include")
+
+# libwebsocketsライブラリを検索
+find_library(LIBWEBSOCKETS_LIB websockets HINTS /opt/homebrew/lib /usr/local/lib)
+if(LIBWEBSOCKETS_LIB)
+    message(STATUS "Found libwebsockets: ${LIBWEBSOCKETS_LIB}")
+    find_path(LIBWEBSOCKETS_INCLUDE_DIR libwebsockets.h
+        PATH_SUFFIXES include
+        PATHS
+            /usr/local
+            /usr
+            /opt
+            /opt/homebrew
+    )
+    if(NOT LIBWEBSOCKETS_INCLUDE_DIR)
+        message(FATAL_ERROR "libwebsockets.h not found")
+    endif()
+else()
+    message(FATAL_ERROR "libwebsockets library not found, please install it using your package manager (e.g., brew install libwebsockets)")
+endif()
+
+# アーキテクチャに基づいたlibwebsocketsのパスを追加
+if(CURRENT_ARCH STREQUAL "arm64")
+    message(STATUS "ARM64 architecture detected, adding homebrew path for ARM64")
+    list(APPEND CMAKE_PREFIX_PATH "/opt/homebrew/opt/libwebsockets")
+    link_directories("/opt/homebrew/lib")
+elseif(CURRENT_ARCH STREQUAL "x86_64")
+    message(STATUS "x86_64 architecture detected, adding homebrew path for Intel")
+    list(APPEND CMAKE_PREFIX_PATH "/usr/local/opt/libwebsockets")
+    link_directories("/usr/local/lib") 
+else()
+    message(WARNING "Unknown architecture: ${CURRENT_ARCH}, using default paths")
+endif()
+
+# pthread（スレッドライブラリ）をリンク
+find_package(Threads REQUIRED)
+target_link_libraries(${PROJECT_NAME} PUBLIC ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(llm_mcp PUBLIC ${CMAKE_THREAD_LIBS_INIT})
+
+# llm_mcpターゲットに必要なライブラリをリンク
+target_link_libraries(llm_mcp PRIVATE
+    ${CMAKE_THREAD_LIBS_INIT}
+    "${LIBWEBSOCKETS_LIB}"
+)
+
+# アーキテクチャ固有の必要な設定
+if(APPLE)
+    # リンクエラーを避けるために必要なフラグを追加
+    target_link_options(llm_mcp PRIVATE
+        "-Wl,-undefined,dynamic_lookup"
+    )
+    
+    # アーキテクチャの一部だけで利用可能なライブラリを使用する場合の特別処理
+    message(STATUS "Setting special link flags for handling single-architecture libraries in universal build")
+    
+    # シンボルが見つからない場合にエラーを出さないようにする
+    set_target_properties(llm_mcp PROPERTIES 
+        LINK_FLAGS "-Wl,-flat_namespace,-undefined,suppress"
+    )
+endif()
 
 # OSCメッセージをJSON化してWebSocket経由で送信する実装に切り替え
 # ネイティブのWebSocketの代わりに外部インターフェースを使用
 message(STATUS "Using native OSC over JSON for WebSocket MCP support")
+message(STATUS "Added LLM MCP connector for Claude Desktop API integration")
 
 # WebSocketヘッダーファイルのリスト
 set(WEBSOCKET_HEADERS
@@ -196,13 +349,22 @@ foreach(HEADER ${WEBSOCKET_HEADERS})
     endif()
 endforeach()
 
-# ソースファイルにWebSocketヘッダーを関連付け
-set_source_files_properties(${SOURCE_FILES} PROPERTIES OBJECT_DEPENDS "${WEBSOCKET_HEADERS}")
+# OSC BridgeとLLM MCPの両方に共通のコンパイル定義
+# 各ターゲットごとに設定を適用
 
-# 追加コンパイル定義
+# OSC Bridge用の設定
 set_target_properties(${PROJECT_NAME} PROPERTIES
     COMPILE_DEFINITIONS "MCP_WEBSOCKET_SUPPORT=1;MCP_VERSION=\"${OSC_BRIDGE_VERSION}\";LWS_LIBRARY_VERSION=\"${LIBWEBSOCKETS_VERSION}\""
 )
+
+# LLM MCP用の設定
+set_target_properties(llm_mcp PROPERTIES
+    COMPILE_DEFINITIONS "MCP_WEBSOCKET_SUPPORT=1;MCP_VERSION=\"${OSC_BRIDGE_VERSION}\";LWS_LIBRARY_VERSION=\"${LIBWEBSOCKETS_VERSION}\""
+)
+
+# WebSocketヘッダーの依存関係を設定
+set_source_files_properties(osc_bridge.cpp PROPERTIES OBJECT_DEPENDS "${WEBSOCKET_HEADERS}")
+set_source_files_properties(mcp.llm_mcp.cpp PROPERTIES OBJECT_DEPENDS "${WEBSOCKET_HEADERS}")
 
 #############################################################
 # テスト環境（Issue 24: Min-DevKit依存分離）

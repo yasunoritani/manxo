@@ -3,14 +3,14 @@
 # OSC Bridge テスト実行スクリプト
 # Issue 22: Catchテストフレームワークの環境構築とテスト自動化
 # Issue 24: Min-DevKit依存分離とスタンドアロンテスト環境の追加
-# 
+#
 # 使用方法: ./run_tests.sh [オプション] [テストフィルター]
 # オプション:
 #   --standalone    Min-DevKit非依存のスタンドアロンテストを実行
 #   --legacy        Min-DevKit依存の従来のテストを実行（デフォルト）
 #   --all           両方のテスト環境でテストを実行
 #
-# 例: 
+# 例:
 #   ./run_tests.sh                     # 従来のテストを実行
 #   ./run_tests.sh --standalone        # スタンドアロンテストを実行
 #   ./run_tests.sh "M4L lifecycle"     # 従来のテストからM4Lライフサイクルテストのみ実行
@@ -19,7 +19,9 @@
 set -e
 
 # 設定
-PROJECT_ROOT="/Users/mymac/v8ui"
+# スクリプトの場所からプロジェクトルートを取得
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="${SCRIPT_DIR}"
 BUILD_DIR="${PROJECT_ROOT}/src/min-devkit/osc_bridge/build"
 TEST_RESULTS_DIR="${PROJECT_ROOT}/docs/test_results"
 DATE_STAMP=$(date +"%Y%m%d_%H%M%S")
@@ -60,11 +62,11 @@ build_and_run_legacy_tests() {
   cd "${PROJECT_ROOT}/src/min-devkit/osc_bridge"
   cmake -S . -B "${BUILD_DIR}" -DBUILD_OSC_BRIDGE_TESTS=ON
   cmake --build "${BUILD_DIR}" --target test_osc_bridge
-  
+
   # テスト実行
   echo "🧪 従来のテスト環境でテストを実行しています..."
   cd "${BUILD_DIR}"
-  
+
   # テストバイナリの確認
   TEST_BINARY="${BUILD_DIR}/tests/test_osc_bridge"
   if [ ! -f "${TEST_BINARY}" ]; then
@@ -73,19 +75,19 @@ build_and_run_legacy_tests() {
     echo "testsディレクトリを確認: $(ls -la ${BUILD_DIR}/tests 2>/dev/null || echo 'testsディレクトリが存在しません')"
     return 1
   fi
-  
+
   # Max/MSPフレームワークのパスを設定
   MAX_SDK_PATH="${PROJECT_ROOT}/min-dev/min-devkit/source/min-api/max-sdk-base/c74support"
   MAX_FRAMEWORK_PATH="${MAX_SDK_PATH}/max-includes"
   JIT_FRAMEWORK_PATH="${MAX_SDK_PATH}/jit-includes"
   MSP_FRAMEWORK_PATH="${MAX_SDK_PATH}/msp-includes"
-  
+
   # 現在の作業ディレクトリを保存
   CURRENT_DIR=$(pwd)
-  
+
   # テスト実行ディレクトリに移動
   cd "$(dirname "${TEST_BINARY}")"
-  
+
   # テスト実行（フィルター付きまたはすべて）
   echo "📋 従来のテスト結果は ${TEST_LOG_FILE} に保存されます"
   {
@@ -99,24 +101,24 @@ build_and_run_legacy_tests() {
     echo "- テストバイナリ: $(basename "${TEST_BINARY}")"
     echo "- 実行ディレクトリ: $(pwd)"
     echo ""
-    
+
     if [ -n "$TEST_FILTER" ]; then
       echo "🔍 フィルター '$TEST_FILTER' でテストを実行"
       # 環境変数を設定してテスト実行
       DYLD_FRAMEWORK_PATH="${MAX_FRAMEWORK_PATH}:${JIT_FRAMEWORK_PATH}:${MSP_FRAMEWORK_PATH}:$DYLD_FRAMEWORK_PATH" \
       DYLD_LIBRARY_PATH="${MAX_FRAMEWORK_PATH}:${JIT_FRAMEWORK_PATH}:${MSP_FRAMEWORK_PATH}:$DYLD_LIBRARY_PATH" \
           "./$(basename "${TEST_BINARY}")" "$TEST_FILTER" -s
-    else 
+    else
       echo "🔍 全テストを実行"
       # 環境変数を設定してテスト実行
       DYLD_FRAMEWORK_PATH="${MAX_FRAMEWORK_PATH}:${JIT_FRAMEWORK_PATH}:${MSP_FRAMEWORK_PATH}:$DYLD_FRAMEWORK_PATH" \
       DYLD_LIBRARY_PATH="${MAX_FRAMEWORK_PATH}:${JIT_FRAMEWORK_PATH}:${MSP_FRAMEWORK_PATH}:$DYLD_LIBRARY_PATH" \
           "./$(basename "${TEST_BINARY}")" -s
     fi
-    
+
     # 終了コードを保存
     TEST_RESULT=$?
-    
+
     echo ""
     echo "================================="
     if [ ${TEST_RESULT} -eq 0 ]; then
@@ -125,13 +127,13 @@ build_and_run_legacy_tests() {
       echo "❌ 従来のテスト結果: 失敗"
     fi
     echo "================================="
-    
+
     # 元のディレクトリに戻る
     cd "${CURRENT_DIR}"
-    
+
     return $TEST_RESULT
   } | tee -a "${TEST_LOG_FILE}"
-  
+
   return ${PIPESTATUS[0]}
 }
 
@@ -140,11 +142,11 @@ build_and_run_standalone_tests() {
   cd "${PROJECT_ROOT}/src/min-devkit/osc_bridge"
   cmake -S . -B "${BUILD_DIR}" -DBUILD_OSC_BRIDGE_STANDALONE_TESTS=ON
   cmake --build "${BUILD_DIR}" --target test_osc_bridge_standalone
-  
+
   # テスト実行
   echo "🧪 スタンドアロンテスト環境でテストを実行しています..."
   cd "${BUILD_DIR}"
-  
+
   # テストバイナリの確認
   TEST_BINARY="${BUILD_DIR}/tests/test_osc_bridge_standalone"
   if [ ! -f "${TEST_BINARY}" ]; then
@@ -153,13 +155,13 @@ build_and_run_standalone_tests() {
     echo "testsディレクトリを確認: $(ls -la ${BUILD_DIR}/tests 2>/dev/null || echo 'testsディレクトリが存在しません')"
     return 1
   fi
-  
+
   # 現在の作業ディレクトリを保存
   CURRENT_DIR=$(pwd)
-  
+
   # テスト実行ディレクトリに移動
   cd "$(dirname "${TEST_BINARY}")"
-  
+
   # テスト実行（フィルター付きまたはすべて）
   echo "📋 スタンドアロンテスト結果は ${TEST_LOG_FILE} に保存されます"
   {
@@ -172,18 +174,18 @@ build_and_run_standalone_tests() {
     echo "- テストバイナリ: $(basename "${TEST_BINARY}")"
     echo "- 実行ディレクトリ: $(pwd)"
     echo ""
-    
+
     if [ -n "$TEST_FILTER" ]; then
       echo "🔍 フィルター '$TEST_FILTER' でスタンドアロンテストを実行"
       "./$(basename "${TEST_BINARY}")" "$TEST_FILTER" -s
-    else 
+    else
       echo "🔍 全スタンドアロンテストを実行"
       "./$(basename "${TEST_BINARY}")" -s
     fi
-    
+
     # 終了コードを保存
     TEST_RESULT=$?
-    
+
     echo ""
     echo "================================="
     if [ ${TEST_RESULT} -eq 0 ]; then
@@ -192,13 +194,13 @@ build_and_run_standalone_tests() {
       echo "❌ スタンドアロンテスト結果: 失敗"
     fi
     echo "================================="
-    
+
     # 元のディレクトリに戻る
     cd "${CURRENT_DIR}"
-    
+
     return $TEST_RESULT
   } | tee -a "${TEST_LOG_FILE}"
-  
+
   return ${PIPESTATUS[0]}
 }
 
@@ -231,16 +233,16 @@ case "${TEST_MODE}" in
   "all")
     build_and_run_legacy_tests
     LEGACY_RESULT=$?
-    
+
     echo ""
     echo "================================="
     echo "両方のテスト環境を実行中..."
     echo "================================="
     echo "" | tee -a "${TEST_LOG_FILE}"
-    
+
     build_and_run_standalone_tests
     STANDALONE_RESULT=$?
-    
+
     # 両方のテストが成功した場合のみ成功
     if [ $LEGACY_RESULT -eq 0 ] && [ $STANDALONE_RESULT -eq 0 ]; then
       FINAL_RESULT=0
