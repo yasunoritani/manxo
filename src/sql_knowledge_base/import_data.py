@@ -6,18 +6,21 @@ import csv
 import sqlite3
 import sys
 import json
+import glob
 from pathlib import Path
 
 # 基本設定
-DB_NAME = 'max_knowledge.sqlite'
+DB_NAME = 'max_claude_kb.db'  # DB名を修正
 CSV_DIR = '../../docs'
+FIXED_CSV_DIR = '../../docs/fixed'
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(SCRIPT_DIR, DB_NAME)
-CSV_PATH = os.path.join(SCRIPT_DIR, CSV_DIR)
+CSV_PATH = os.path.normpath(os.path.join(SCRIPT_DIR, CSV_DIR))
+FIXED_CSV_PATH = os.path.normpath(os.path.join(SCRIPT_DIR, FIXED_CSV_DIR))
 
-# CSVファイルパス定義（元の大規模CSVファイル名に合わせる）
+# CSVファイルパス定義（実際のファイル名に合わせる）
 CSV_FILES = {
-    'max_objects': os.path.join(CSV_PATH, 'MaxObjects.csv'),
+    'max_objects': os.path.join(FIXED_CSV_PATH, 'MaxObjects_fixed.csv'),  # 修正したファイルを使用
     'min_devkit_api': os.path.join(CSV_PATH, 'Min-DevKit_API.csv'),
     'connection_patterns': os.path.join(CSV_PATH, 'ConnectionPatterns.csv'),
     'validation_rules': os.path.join(CSV_PATH, 'ValidationRules.csv'),
@@ -46,7 +49,7 @@ def create_database():
     return conn
 
 def import_max_objects(conn, csv_path):
-    """Maxオブジェクト情報をインポート（元の大規模CSVファイル形式に合わせる）"""
+    """Maxオブジェクト情報をインポート"""
     print(f"Maxオブジェクト情報をインポート: {csv_path}")
 
     cursor = conn.cursor()
@@ -105,6 +108,9 @@ def import_max_objects(conn, csv_path):
                 imported_count += 1
             except sqlite3.IntegrityError as e:
                 print(f"  インポートエラー ({name}): {e}")
+                continue
+            except Exception as e:
+                print(f"  処理エラー ({name}): {e}")
                 continue
 
     conn.commit()
@@ -356,15 +362,46 @@ def check_database(conn):
 def main():
     """メイン処理"""
     try:
+        # コマンドライン引数から接続パターンファイルを取得
+        custom_connection_patterns_path = None
+        if len(sys.argv) > 1:
+            custom_path = sys.argv[1]
+            if os.path.exists(custom_path):
+                custom_connection_patterns_path = custom_path
+                print(f"カスタム接続パターンファイルを使用: {custom_path}")
+            else:
+                print(f"警告: 指定されたファイルが存在しません: {custom_path}")
+
         # データベース作成
         conn = create_database()
 
         # 各CSVをインポート（存在するファイルのみ）
-        import_max_objects(conn, CSV_FILES['max_objects'])
-        import_min_devkit_api(conn, CSV_FILES['min_devkit_api'])
-        import_connection_patterns(conn, CSV_FILES['connection_patterns'])
-        import_validation_rules(conn, CSV_FILES['validation_rules'])
-        import_api_mapping(conn, CSV_FILES['api_mapping'])
+        if os.path.exists(CSV_FILES['max_objects']):
+            import_max_objects(conn, CSV_FILES['max_objects'])
+        else:
+            print(f"警告: ファイルが見つかりません: {CSV_FILES['max_objects']}")
+
+        if os.path.exists(CSV_FILES['min_devkit_api']):
+            import_min_devkit_api(conn, CSV_FILES['min_devkit_api'])
+        else:
+            print(f"警告: ファイルが見つかりません: {CSV_FILES['min_devkit_api']}")
+
+        # カスタム接続パターンファイルパスがある場合はそれを使用、なければデフォルトを使用
+        connection_patterns_path = custom_connection_patterns_path or CSV_FILES['connection_patterns']
+        if os.path.exists(connection_patterns_path):
+            import_connection_patterns(conn, connection_patterns_path)
+        else:
+            print(f"警告: ファイルが見つかりません: {connection_patterns_path}")
+
+        if os.path.exists(CSV_FILES['validation_rules']):
+            import_validation_rules(conn, CSV_FILES['validation_rules'])
+        else:
+            print(f"警告: ファイルが見つかりません: {CSV_FILES['validation_rules']}")
+
+        if os.path.exists(CSV_FILES['api_mapping']):
+            import_api_mapping(conn, CSV_FILES['api_mapping'])
+        else:
+            print(f"警告: ファイルが見つかりません: {CSV_FILES['api_mapping']}")
 
         # データベース内容を確認
         check_database(conn)
