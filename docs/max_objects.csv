@@ -1,0 +1,21 @@
+name,description,category,version_compatibility,inlets,outlets,is_ui_object,is_deprecated,alternative
+metro,一定間隔でバングを出力するメトロノームオブジェクト,time,Max 4.0+,"[{""index"": 0, ""type"": ""control"", ""description"": ""開始/停止とミリ秒単位の間隔設定""}, {""index"": 1, ""type"": ""control"", ""description"": ""間隔（ミリ秒）""}]","[{""index"": 0, ""type"": ""control"", ""description"": ""バング出力""}]",0,0,
+counter,入力された数のカウントを行うオブジェクト,control,Max 4.0+,"[{""index"": 0, ""type"": ""control"", ""description"": ""カウンターを増加""}, {""index"": 1, ""type"": ""control"", ""description"": ""カウンターをリセット""}, {""index"": 2, ""type"": ""control"", ""description"": ""最大値を設定""}]","[{""index"": 0, ""type"": ""control"", ""description"": ""現在のカウント値""}]",0,0,
+button,バングをトリガーするためのボタンUIオブジェクト,ui,Max 4.0+,"[{""index"": 0, ""type"": ""control"", ""description"": ""ボタンを押す""}]","[{""index"": 0, ""type"": ""control"", ""description"": ""バング出力""}]",1,0,
+number,数値を表示・編集するためのUIオブジェクト,ui,Max 4.0+,"[{""index"": 0, ""type"": ""control"", ""description"": ""数値入力""}]","[{""index"": 0, ""type"": ""control"", ""description"": ""数値出力""}]",1,0,
+print,Max Console に情報を出力するオブジェクト,debug,Max 4.0+,"[{""index"": 0, ""type"": ""control"", ""description"": ""出力する情報""}]","[]",0,0,
+dac~,デジタル-アナログ変換 (スピーカー出力),audio,Max 4.0+,"[{""index"": 0, ""type"": ""audio"", ""description"": ""左チャンネル入力""}, {""index"": 1, ""type"": ""audio"", ""description"": ""右チャンネル入力""}]","[]",0,0,
+adc~,アナログ-デジタル変換 (マイク入力),audio,Max 4.0+,"[]","[{""index"": 0, ""type"": ""audio"", ""description"": ""左チャンネル出力""}, {""index"": 1, ""type"": ""audio"", ""description"": ""右チャンネル出力""}]",0,0,
+cycle~,サイン波オシレーター,audio,Max 4.0+,"[{""index"": 0, ""type"": ""control/audio"", ""description"": ""周波数(Hz)""}]","[{""index"": 0, ""type"": ""audio"", ""description"": ""オーディオ信号出力""}]",0,0,
+gain~,オーディオ信号ゲイン調整,audio,Max 4.0+,"[{""index"": 0, ""type"": ""audio"", ""description"": ""オーディオ入力""}]","[{""index"": 0, ""type"": ""audio"", ""description"": ""ゲイン調整後のオーディオ出力""}]",0,0,
+jit.matrix,Jitterマトリックスデータを格納・操作,jitter,Max 5.0+,"[{""index"": 0, ""type"": ""jitter"", ""description"": ""マトリックス入力およびメッセージ入力""}]","[{""index"": 0, ""type"": ""jitter"", ""description"": ""マトリックス出力""}]",0,0,
+jit.window,Jitterマトリックスを表示するウィンドウ,jitter,Max 5.0+,"[{""index"": 0, ""type"": ""jitter"", ""description"": ""マトリックス入力およびメッセージ入力""}]","[]",0,0,
+js,JavaScriptコードを実行する,scripting,Max 5.0+,"[{""index"": 0, ""type"": ""control"", ""description"": ""メッセージ入力""}]","[]",0,0,
+dict,辞書（キー/値ペア）データを格納,data,Max 6.0+,"[{""index"": 0, ""type"": ""control"", ""description"": ""メッセージ入力""}]","[{""index"": 0, ""type"": ""control"", ""description"": ""完了通知または要求されたデータ""}]",0,0,
+coll,コレクション（インデックス付きデータ）を格納,data,Max 4.0+,"[{""index"": 0, ""type"": ""control"", ""description"": ""メッセージ入力""}]","[{""index"": 0, ""type"": ""control"", ""description"": ""完了通知または要求されたデータ""}]",0,0,
+swatch,色を選択するためのUIオブジェクト,ui,Max 5.0+,"[{""index"": 0, ""type"": ""control"", ""description"": ""リスト形式の色情報""}]","[{""index"": 0, ""type"": ""control"", ""description"": ""リスト形式の色情報出力""}]",1,0,
+lcd,描画キャンバスとして機能するUIオブジェクト,ui,Max 4.0+,"[{""index"": 0, ""type"": ""control"", ""description"": ""描画コマンド入力""}]","[]",1,1,jit.pwindow
+poly~,複数のMSPパッチを管理するためのポリフォニーオブジェクト,audio,Max 4.0+,"[{""index"": 0, ""type"": ""control"", ""description"": ""メッセージ入力""}]","[{""index"": 0, ""type"": ""control"", ""description"": ""完了通知または要求されたデータ""}]",0,0,
+sfplay~,サウンドファイル再生,audio,Max 4.0+,"[{""index"": 0, ""type"": ""control"", ""description"": ""メッセージ入力""}]","[{""index"": 0, ""type"": ""audio"", ""description"": ""左チャンネル出力""}, {""index"": 1, ""type"": ""audio"", ""description"": ""右チャンネル出力""}]",0,1,sfizz~
+route,メッセージルーティング,control,Max 4.0+,"[{""index"": 0, ""type"": ""control"", ""description"": ""ルーティングするメッセージ""}]","[{""index"": 0, ""type"": ""control"", ""description"": ""第1要素に一致するメッセージの残り""}, {""index"": 1, ""type"": ""control"", ""description"": ""第2要素に一致するメッセージの残り""}]",0,0,
+zl,リスト処理ユーティリティ,list,Max 4.0+,"[{""index"": 0, ""type"": ""control"", ""description"": ""リスト入力""}, {""index"": 1, ""type"": ""control"", ""description"": ""モード指定""}]","[{""index"": 0, ""type"": ""control"", ""description"": ""結果リスト出力""}]",0,0,
