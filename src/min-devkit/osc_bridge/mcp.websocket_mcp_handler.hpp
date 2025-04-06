@@ -31,54 +31,51 @@ public:
      * @param error_out エラー出力用のMin outlet
      */
     websocket_mcp_handler(outlet<>& output, outlet<>& error_out)
-        : output_(output), error_out_(error_out), 
+        : output_(output), error_out_(error_out),
           claude_handler_(output, error_out),
           websocket_client_(output, error_out),
           websocket_server_(output, error_out),
           is_running_(false) {
-        
+
         // WebSocketサーバーのメッセージハンドラを設定
         websocket_server_.set_message_handler(
             [this](const std::string& client_id, const std::string& message) {
                 handle_websocket_message(client_id, message);
             }
         );
-        
+
         // WebSocketサーバーのバイナリメッセージハンドラを設定
         websocket_server_.set_binary_handler(
             [this](const std::string& client_id, const char* data, size_t len) {
                 handle_websocket_binary(client_id, data, len);
             }
         );
-        
+
         // WebSocketサーバーの接続ハンドラを設定
         websocket_server_.set_connection_handler(
             [this](const std::string& client_id) {
                 handle_client_connected(client_id);
             }
         );
-        
+
         // WebSocketサーバーの切断ハンドラを設定
         websocket_server_.set_disconnection_handler(
             [this](const std::string& client_id) {
                 handle_client_disconnected(client_id);
             }
         );
-        
+
         // WebSocketクライアントのメッセージハンドラを設定
         websocket_client_.set_message_handler(
             [this](const std::string& message) {
                 handle_client_message(message);
             }
         );
-        
+
         // Claude OSCハンドラのコマンド登録
         register_claude_handlers();
-                handle_client_disconnected(client_id);
-            }
-        );
     }
-    
+
     /**
      * デストラクタ
      */
@@ -87,13 +84,13 @@ public:
         if (websocket_server_.is_running()) {
             websocket_server_.stop();
         }
-        
+
         // WebSocketクライアント切断
         if (websocket_client_.is_connected()) {
             websocket_client_.disconnect();
         }
     }
-    
+
     /**
      * WebSocketサーバーの起動
      * @param port ポート番号
@@ -102,14 +99,14 @@ public:
     bool start_server(int port = 8080) {
         return websocket_server_.start(port);
     }
-    
+
     /**
      * WebSocketサーバーの停止
      */
     void stop_server() {
         websocket_server_.stop();
     }
-    
+
     /**
      * WebSocketクライアントの接続
      * @param url 接続先URL
@@ -119,14 +116,14 @@ public:
     bool connect_client(const std::string& url, const std::string& protocols = "osc") {
         return websocket_client_.connect(url, protocols);
     }
-    
+
     /**
      * WebSocketクライアントの切断
      */
     void disconnect_client() {
         websocket_client_.disconnect();
     }
-    
+
     /**
      * Claude Desktopからのメッセージをハンドラーに転送
      * @param address OSCアドレス
@@ -135,7 +132,7 @@ public:
     void process_claude_message(const std::string& address, const atoms& args) {
         claude_handler_.process_message(address, args);
     }
-    
+
     /**
      * MCPコマンドの送信 (WebSocket経由)
      * @param command MCPコマンド
@@ -145,22 +142,22 @@ public:
     bool send_mcp_command(const std::string& command, const atoms& args) {
         // MCPコマンドをフォーマット
         std::string address = "/mcp/" + command;
-        
+
         // WebSocketクライアントが接続中ならそちらに送信
         if (websocket_client_.is_connected()) {
             return websocket_client_.send_osc(address, args);
         }
-        
+
         // WebSocketサーバーが実行中ならブロードキャスト
         if (websocket_server_.is_running()) {
             return websocket_server_.broadcast_osc(address, args);
         }
-        
+
         // どちらも利用不可
         error_out_.send("no_websocket_connection");
         return false;
     }
-    
+
     /**
      * Maxパッチへのコマンド送信
      * @param command Maxコマンド
@@ -172,7 +169,7 @@ public:
         cmd_msg.insert(cmd_msg.end(), args.begin(), args.end());
         output_.send(cmd_msg);
     }
-    
+
     /**
      * M4Lパッチへのコマンド送信
      * @param command M4Lコマンド
@@ -192,72 +189,60 @@ private:
      * @param message 受信したメッセージ
      */
     void handle_websocket_message(const std::string& client_id, const std::string& message) {
-        // 簡易的なJSON解析（実際の実装ではより堅牢なJSONパーサーを使用）
-        if (message.find("\"address\":") != std::string::npos && 
-            message.find("\"args\":") != std::string::npos) {
-            // OSCメッセージとして処理
-            
-            // アドレスの抽出
-            size_t addr_start = message.find("\"address\":\"") + 11;
-            size_t addr_end = message.find("\"", addr_start);
-            std::string address = message.substr(addr_start, addr_end - addr_start);
-            
-            // 引数の処理（簡易的な実装）
-            atoms args;
-            size_t args_start = message.find("\"args\":[") + 8;
-            size_t args_end = message.find("]", args_start);
-            std::string args_str = message.substr(args_start, args_end - args_start);
-            
-            // カンマで分割（非常に簡易的、実際の実装ではJSONパーサーを使用）
-            size_t pos = 0;
-            while ((pos = args_str.find(",")) != std::string::npos) {
-                std::string arg = args_str.substr(0, pos);
-                args_str.erase(0, pos + 1);
-                
-                // 引数を適切な型に変換（簡易的）
-                if (arg.front() == '"' && arg.back() == '"') {
-                    // 文字列
-                    args.push_back(arg.substr(1, arg.length() - 2));
-                } else {
-                    // 数値
-                    try {
-                        float val = std::stof(arg);
-                        args.push_back(val);
-                    } catch (...) {
-                        args.push_back(arg);
+        try {
+            // nlohmann/jsonライブラリを使用してJSONをパース
+            json j = json::parse(message);
+
+            // OSCメッセージフォーマット（address, args）の確認
+            if (j.contains("address") && j.contains("args") && j["address"].is_string() && j["args"].is_array()) {
+                // アドレスと引数の取得
+                std::string address = j["address"].get<std::string>();
+                atoms args;
+
+                // 引数の配列を処理
+                for (const auto& arg : j["args"]) {
+                    if (arg.is_string()) {
+                        args.push_back(arg.get<std::string>());
+                    } else if (arg.is_number_float()) {
+                        args.push_back(arg.get<float>());
+                    } else if (arg.is_number_integer()) {
+                        args.push_back(static_cast<int>(arg.get<int64_t>()));
+                    } else if (arg.is_boolean()) {
+                        args.push_back(arg.get<bool>() ? 1 : 0);
+                    } else if (arg.is_null()) {
+                        args.push_back(0); // Maxではnullは整数0として扱う
+                    } else {
+                        // その他の型は文字列に変換
+                        args.push_back(arg.dump());
                     }
                 }
-            }
-            
-            // 最後の引数
-            if (!args_str.empty()) {
-                if (args_str.front() == '"' && args_str.back() == '"') {
-                    args.push_back(args_str.substr(1, args_str.length() - 2));
+
+                // MCPプレフィックスの処理
+                if (address.substr(0, 5) == "/mcp/") {
+                    // MCPコマンドの処理
+                    handle_mcp_command(address.substr(5), args);
+                } else if (address.substr(0, 8) == "/claude/") {
+                    // Claudeメッセージの処理
+                    claude_handler_.process_message(address, args);
                 } else {
-                    try {
-                        float val = std::stof(args_str);
-                        args.push_back(val);
-                    } catch (...) {
-                        args.push_back(args_str);
-                    }
+                    // その他のOSCメッセージ
+                    atoms osc_msg;
+                    osc_msg.push_back(address);
+                    osc_msg.insert(osc_msg.end(), args.begin(), args.end());
+                    output_.send(osc_msg);
                 }
-            }
-            
-            // MCPプレフィックスの処理
-            if (address.substr(0, 5) == "/mcp/") {
-                // MCPコマンドの処理
-                handle_mcp_command(address.substr(5), args);
-            } else if (address.substr(0, 8) == "/claude/") {
-                // Claudeメッセージの処理
-                claude_handler_.process_message(address, args);
             } else {
-                // その他のOSCメッセージ
-                atoms osc_msg;
-                osc_msg.push_back(address);
-                osc_msg.insert(osc_msg.end(), args.begin(), args.end());
-                output_.send(osc_msg);
+                // 形式が正しくないJSONメッセージ
+                atoms text_msg;
+                text_msg.push_back("websocket_json");
+                text_msg.push_back(client_id);
+                text_msg.push_back(message);
+                output_.send(text_msg);
             }
-        } else {
+        } catch (const json::parse_error& e) {
+            // JSONパースエラー
+            error_out_.send("json_parse_error", symbol(e.what()));
+
             // 通常のテキストメッセージとして処理
             atoms text_msg;
             text_msg.push_back("websocket_text");
@@ -266,7 +251,7 @@ private:
             output_.send(text_msg);
         }
     }
-    
+
     /**
      * クライアント接続時の処理
      * @param client_id クライアントID
@@ -277,7 +262,7 @@ private:
         connection_info.push_back(client_id);
         output_.send(connection_info);
     }
-    
+
     /**
      * クライアント切断時の処理
      * @param client_id クライアントID
@@ -288,7 +273,7 @@ private:
         disconnection_info.push_back(client_id);
         output_.send(disconnection_info);
     }
-    
+
     /**
      * MCPコマンドの処理
      * @param command MCPコマンド（/mcp/プレフィックスを除いたもの）
@@ -323,7 +308,7 @@ private:
             error_out_.send("unknown_mcp_command", symbol(command));
         }
     }
-    
+
     /**
      * ステータス応答の送信
      */
@@ -332,30 +317,52 @@ private:
         status.push_back("active");
         status.push_back("websocket_mcp");
         status.push_back(symbol(__DATE__ " " __TIME__));
-        
+
         // WebSocketクライアントが接続中ならそちらに送信
         if (websocket_client_.is_connected()) {
             websocket_client_.send_osc("/mcp/status_response", status);
         }
-        
+
         // WebSocketサーバーが実行中ならブロードキャスト
         if (websocket_server_.is_running()) {
             websocket_server_.broadcast_osc("/mcp/status_response", status);
         }
-        
+
         // Maxパッチにも通知
         atoms status_max;
         status_max.push_back("/mcp/status_response");
         status_max.insert(status_max.end(), status.begin(), status.end());
         output_.send(status_max);
     }
-    
+
 private:
     outlet<>& output_;
     outlet<>& error_out_;
     claude_handler claude_handler_;
     websocket_client websocket_client_;
     websocket_server websocket_server_;
+    bool is_running_;
+
+    // Claudeハンドラーの登録（実装省略）
+    void register_claude_handlers() {
+        // Claude特有のコマンドハンドラーを登録
+    }
+
+    // WebSocketクライアントからのメッセージ処理
+    void handle_client_message(const std::string& message) {
+        // クライアントからのメッセージを処理
+        try {
+            json j = json::parse(message);
+            // 処理ロジック
+        } catch (const json::parse_error& e) {
+            error_out_.send("client_json_parse_error", symbol(e.what()));
+        }
+    }
+
+    // バイナリメッセージの処理
+    void handle_websocket_binary(const std::string& client_id, const char* data, size_t len) {
+        // バイナリメッセージの処理ロジック
+    }
 };
 
 } // namespace osc

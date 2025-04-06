@@ -1,0 +1,304 @@
+
+=================================
+OSC Bridgeスタンドアロンテスト実行レポート（Min-DevKit非依存）
+実行日時: 2025年 4月 2日 水曜日 11時46分56秒 JST
+=================================
+
+環境設定情報:
+- テストバイナリ: test_osc_bridge_standalone
+- 実行ディレクトリ: /Users/mymac/v8ui/src/min-devkit/osc_bridge/build/tests
+
+🔍 全スタンドアロンテストを実行
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+test_osc_bridge_standalone is a Catch v2.13.8 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+Scenario: OscPack Library Test - Verify Submodule
+      Given: OscOutboundPacketStream
+       When: Creating an OSC message
+       Then: Packet should be created successfully
+-------------------------------------------------------------------------------
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/standalone_test.cpp:30
+...............................................................................
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/standalone_test.cpp:31: PASSED:
+  CHECK( packet.Size() > 0 )
+with expansion:
+  44 > 0
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/standalone_test.cpp:32: PASSED:
+  CHECK_NOTHROW( packet.Data() )
+
+-------------------------------------------------------------------------------
+Scenario: OscPack Library Test - Verify Submodule
+      Given: OscReceivedElements
+       When: Testing build integration
+       Then: Code should compile successfully
+-------------------------------------------------------------------------------
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/standalone_test.cpp:39
+...............................................................................
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/standalone_test.cpp:40: PASSED:
+  CHECK( true )
+
+-------------------------------------------------------------------------------
+Scenario: Catch2 Framework Test
+      Given: Math operations
+       When: Adding two numbers
+       Then: The result should be correct
+-------------------------------------------------------------------------------
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/standalone_test.cpp:56
+...............................................................................
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/standalone_test.cpp:57: PASSED:
+  CHECK( result == 5 )
+with expansion:
+  5 == 5
+
+-------------------------------------------------------------------------------
+Scenario: Catch2 Framework Test
+      Given: String operations
+       When: Concatenating strings
+       Then: The result should be correct
+-------------------------------------------------------------------------------
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/standalone_test.cpp:69
+...............................................................................
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/standalone_test.cpp:70: PASSED:
+  CHECK( result == "Hello World" )
+with expansion:
+  "Hello World" == "Hello World"
+
+-------------------------------------------------------------------------------
+Verify OscPack Submodule Version
+-------------------------------------------------------------------------------
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/standalone_test.cpp:77
+...............................................................................
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/standalone_test.cpp:80: PASSED:
+  CHECK( true )
+with message:
+  OscPack submodule integration verified
+
+-------------------------------------------------------------------------------
+Scenario: Error Recovery Tests with Mock Implementation
+      Given: An OSC client with connection capabilities
+       When: Server is unavailable initially but becomes available later
+       Then: Client should auto-reconnect and send successfully
+-------------------------------------------------------------------------------
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:50
+...............................................................................
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:51: PASSED:
+  CHECK_FALSE( initial_result )
+with expansion:
+  !false
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:52: PASSED:
+  CHECK( reconnect_result )
+with expansion:
+  true
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:53: PASSED:
+  CHECK( send_result )
+with expansion:
+  true
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:54: PASSED:
+  CHECK( client->is_connected() )
+with expansion:
+  true
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:55: PASSED:
+  CHECK( client->get_last_error() == mcp::osc::osc_error_code::none )
+with expansion:
+  0 == 0
+
+-------------------------------------------------------------------------------
+Scenario: Error Recovery Tests with Mock Implementation
+      Given: An OSC client with connection capabilities
+       When: Connection is lost and then restored
+-------------------------------------------------------------------------------
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:59
+...............................................................................
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:64: PASSED:
+  CHECK( connected )
+with expansion:
+  true
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:65: PASSED:
+  CHECK( client->is_connected() )
+with expansion:
+  true
+
+-------------------------------------------------------------------------------
+Scenario: Error Recovery Tests with Mock Implementation
+      Given: An OSC client with connection capabilities
+       When: Connection is lost and then restored
+       Then: Client should detect disconnection and auto-reconnect
+-------------------------------------------------------------------------------
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:80
+...............................................................................
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:81: PASSED:
+  CHECK( connected )
+with expansion:
+  true
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:82: PASSED:
+  CHECK( send_failed )
+with expansion:
+  true
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:83: PASSED:
+  CHECK( reconnected )
+with expansion:
+  true
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:84: PASSED:
+  CHECK( client->is_connected() )
+with expansion:
+  true
+
+-------------------------------------------------------------------------------
+Scenario: Error Recovery Tests with Mock Implementation
+      Given: An OSC bridge with both client and server
+       When: Setting up the bridge
+       Then: Bridge should connect successfully
+-------------------------------------------------------------------------------
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:102
+...............................................................................
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:103: PASSED:
+  CHECK( connected )
+with expansion:
+  true
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:104: PASSED:
+  CHECK( bridge->is_connected() )
+with expansion:
+  true
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:105: PASSED:
+  CHECK( bridge->get_last_error() == mcp::osc::osc_error_code::none )
+with expansion:
+  0 == 0
+
+-------------------------------------------------------------------------------
+Scenario: Error Recovery Tests with Mock Implementation
+      Given: An OSC bridge with both client and server
+       When: Handling M4L lifecycle events
+       Then: Bridge should handle M4L lifecycle events properly
+-------------------------------------------------------------------------------
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:125
+...............................................................................
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:126: PASSED:
+  CHECK( disconnected )
+with expansion:
+  true
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:127: PASSED:
+  CHECK( reconnected )
+with expansion:
+  true
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:128: PASSED:
+  CHECK( bridge->is_connected() )
+with expansion:
+  true
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:132: PASSED:
+  CHECK( events.size() == 2 )
+with expansion:
+  2 == 2
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:133: PASSED:
+  CHECK( events[0] == "liveset_closed" )
+with expansion:
+  "liveset_closed" == "liveset_closed"
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:134: PASSED:
+  CHECK( events[1] == "liveset_loaded" )
+with expansion:
+  "liveset_loaded" == "liveset_loaded"
+
+-------------------------------------------------------------------------------
+Scenario: Error Recovery Tests with Mock Implementation
+      Given: An OSC bridge with both client and server
+       When: Server receives invalid messages
+-------------------------------------------------------------------------------
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:138
+...............................................................................
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:152: PASSED:
+  CHECK_NOTHROW( [&]{ server_ptr->receive_message("/test/invalid", mcp::osc::atoms{"invalid"}); } )
+
+-------------------------------------------------------------------------------
+Scenario: Error Recovery Tests with Mock Implementation
+      Given: An OSC bridge with both client and server
+       When: Server receives invalid messages
+       Then: Server should handle invalid messages gracefully
+-------------------------------------------------------------------------------
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:165
+...............................................................................
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:166: PASSED:
+  CHECK( received_error )
+with expansion:
+  true
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:167: PASSED:
+  CHECK( bridge->get_server()->get_last_error() == mcp::osc::osc_error_code::none )
+with expansion:
+  0 == 0
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:168: PASSED:
+  CHECK( bridge->is_connected() )
+with expansion:
+  true
+
+-------------------------------------------------------------------------------
+Scenario: Error Recovery Tests with Mock Implementation
+      Given: An OSC bridge with both client and server
+       When: Testing end-to-end communication
+       Then: End-to-end communication should work correctly
+-------------------------------------------------------------------------------
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:198
+...............................................................................
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:199: PASSED:
+  CHECK( message_received )
+with expansion:
+  true
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:200: PASSED:
+  CHECK( received_address == "/test/echo" )
+with expansion:
+  "/test/echo" == "/test/echo"
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:201: PASSED:
+  CHECK( received_args.get_string(0) == "hello" )
+with expansion:
+  "hello" == "hello"
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:202: PASSED:
+  CHECK( received_args.get_int(1) == 123 )
+with expansion:
+  123 == 123
+
+/Users/mymac/v8ui/src/min-devkit/osc_bridge/tests/error_recovery_test_new.cpp:203: PASSED:
+  CHECK( received_args.get_float(2) == Approx(45.67f) )
+with expansion:
+  45.67f == Approx( 45.6699981689 )
+
+===============================================================================
+All tests passed (35 assertions in 4 test cases)
+
+
+=================================
+✅ スタンドアロンテスト結果: 成功
+=================================

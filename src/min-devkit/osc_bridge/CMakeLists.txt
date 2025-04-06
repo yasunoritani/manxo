@@ -8,11 +8,11 @@ project(osc_bridge)
 if (NOT DEFINED C74_MIN_API_DIR)
     # GitHubからクローンしたmin-devリポジトリを使用するが、相対パスで参照
     set(C74_MIN_API_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../min-dev/min-devkit/source/min-api")
-    
+
     if(NOT EXISTS "${C74_MIN_API_DIR}")
         message(WARNING "Min-API not found at relative path: ${C74_MIN_API_DIR}")
         message(STATUS "Trying alternative relative paths...")
-        
+
         # 代替パスを試す
         set(ALT_MIN_API_DIR "${CMAKE_SOURCE_DIR}/min-dev/min-devkit/source/min-api")
         if(EXISTS "${ALT_MIN_API_DIR}")
@@ -41,7 +41,7 @@ include(${C74_MIN_API_DIR}/script/min-pretarget.cmake)
 #############################################################
 
 # includeディレクトリ設定
-include_directories( 
+include_directories(
 	"${C74_INCLUDES}"
 	"${CMAKE_CURRENT_SOURCE_DIR}"
 )
@@ -100,13 +100,13 @@ if(APPLE)
     # テスト完了後に元に戻す必要あり
     set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE STRING "Build architectures for Mac OS X" FORCE)
     message(STATUS "テスト用に現在arm64のみをビルドしています")
-    
+
     # Max 8.2+に対応したデプロイメントターゲット
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.13" CACHE STRING "Minimum OS X deployment version" FORCE)
-    
+
     # M4L環境用の最適化設定
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden -fvisibility-inlines-hidden")
-    
+
     # アーキテクチャの確認メッセージ
     message(STATUS "Building for architectures: ${CMAKE_OSX_ARCHITECTURES}")
 endif()
@@ -144,7 +144,7 @@ endforeach()
 # OSCpackをプリリンクするためにターゲットに追加
 if(DEFINED OSCPACK_LIB)
     message(STATUS "Using oscpack library: ${OSCPACK_LIB}")
-    
+
     # ユニバーサルビルドのチェック（macOSのみ）
     if(APPLE AND OSCPACK_LIB MATCHES "build_universal/liboscpack.a")
         message(STATUS "Using universal build of oscpack library")
@@ -152,7 +152,7 @@ if(DEFINED OSCPACK_LIB)
         message(WARNING "Not using the universal build of oscpack library. This may cause architecture compatibility issues.")
         message(WARNING "Run 'oscpack/build_universal.sh' to create a universal binary.")
     endif()
-    
+
     # 両方のターゲットにOSCpackをリンク
     target_link_libraries(${PROJECT_NAME} PUBLIC "${OSCPACK_LIB}")
     target_link_libraries(llm_mcp PUBLIC "${OSCPACK_LIB}")
@@ -169,7 +169,7 @@ if(APPLE)
         "-framework CoreFoundation"
         "-framework CoreAudio"
     )
-    
+
     # LLM MCP用のフレームワークリンク
     target_link_libraries(llm_mcp PUBLIC
         "-framework CoreFoundation"
@@ -216,9 +216,9 @@ if(APPLE)
     target_link_options(llm_mcp PRIVATE
         "-Wl,-undefined,dynamic_lookup"
     )
-    
+
     # シンボルが見つからない場合にエラーを出さないようにする
-    set_target_properties(llm_mcp PROPERTIES 
+    set_target_properties(llm_mcp PROPERTIES
         LINK_FLAGS "-Wl,-flat_namespace,-undefined,suppress"
     )
 endif()
@@ -248,20 +248,52 @@ find_package(PkgConfig REQUIRED)
 # nlohmann-jsonライブラリを検索
 find_package(nlohmann_json QUIET)
 if(nlohmann_json_FOUND)
-    message(STATUS "Found nlohmann-json via find_package")
+    message(STATUS "Found nlohmann_json: ${nlohmann_json_DIR}")
+    target_link_libraries(${PROJECT_NAME} PUBLIC nlohmann_json::nlohmann_json)
+    target_link_libraries(llm_mcp PUBLIC nlohmann_json::nlohmann_json)
 else()
-    find_path(NLOHMANN_JSON_INCLUDE_DIRS nlohmann/json.hpp
-        PATH_SUFFIXES include
+    message(STATUS "nlohmann_json package not found, trying alternative methods")
+
+    # 方法1: ヘッダーファイルを探す
+    find_path(NLOHMANN_JSON_INCLUDE_DIR NAMES nlohmann/json.hpp
         PATHS
-            /usr/local
-            /usr
-            /opt
-            /opt/homebrew
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../externals/include
+        /usr/include
+        /usr/local/include
+        /opt/local/include
+        /opt/homebrew/include
+        $ENV{PROGRAMFILES}/nlohmann-json/include
     )
-    if(NLOHMANN_JSON_INCLUDE_DIRS)
-        message(STATUS "Found nlohmann-json include directory: ${NLOHMANN_JSON_INCLUDE_DIRS}")
+
+    if(NLOHMANN_JSON_INCLUDE_DIR)
+        message(STATUS "Found nlohmann/json.hpp at: ${NLOHMANN_JSON_INCLUDE_DIR}")
+        target_include_directories(${PROJECT_NAME} PUBLIC ${NLOHMANN_JSON_INCLUDE_DIR})
+        target_include_directories(llm_mcp PUBLIC ${NLOHMANN_JSON_INCLUDE_DIR})
     else()
-        message(FATAL_ERROR "nlohmann-json library not found, please install it using your package manager")
+        # 方法2: 最後の手段として、ダウンロードして含める
+        message(STATUS "Downloading nlohmann/json.hpp at build time")
+
+        # ビルド時にダウンロードするコマンドを設定
+        file(DOWNLOAD
+            https://github.com/nlohmann/json/releases/download/v3.11.3/json.hpp
+            ${CMAKE_CURRENT_BINARY_DIR}/nlohmann/json.hpp
+            SHOW_PROGRESS
+        )
+
+        # ダウンロードしたファイルを含めるディレクトリを設定
+        target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
+        target_include_directories(llm_mcp PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
+
+        # ダウンロードディレクトリを確実に作成
+        add_custom_command(
+            TARGET ${PROJECT_NAME} PRE_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/nlohmann
+        )
+
+        add_custom_command(
+            TARGET llm_mcp PRE_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/nlohmann
+        )
     endif()
 endif()
 
@@ -296,7 +328,7 @@ if(CURRENT_ARCH STREQUAL "arm64")
 elseif(CURRENT_ARCH STREQUAL "x86_64")
     message(STATUS "x86_64 architecture detected, adding homebrew path for Intel")
     list(APPEND CMAKE_PREFIX_PATH "/usr/local/opt/libwebsockets")
-    link_directories("/usr/local/lib") 
+    link_directories("/usr/local/lib")
 else()
     message(WARNING "Unknown architecture: ${CURRENT_ARCH}, using default paths")
 endif()
@@ -318,12 +350,12 @@ if(APPLE)
     target_link_options(llm_mcp PRIVATE
         "-Wl,-undefined,dynamic_lookup"
     )
-    
+
     # アーキテクチャの一部だけで利用可能なライブラリを使用する場合の特別処理
     message(STATUS "Setting special link flags for handling single-architecture libraries in universal build")
-    
+
     # シンボルが見つからない場合にエラーを出さないようにする
-    set_target_properties(llm_mcp PROPERTIES 
+    set_target_properties(llm_mcp PROPERTIES
         LINK_FLAGS "-Wl,-flat_namespace,-undefined,suppress"
     )
 endif()
@@ -377,7 +409,7 @@ option(BUILD_OSC_BRIDGE_STANDALONE_TESTS "Build standalone OSC Bridge tests with
 # Issue 24: Min-DevKit依存のテスト環境（従来）
 if(BUILD_OSC_BRIDGE_TESTS)
     message(STATUS "Building OSC Bridge tests with Min-DevKit integration")
-    
+
     # Min-DevKit依存のテストファイル
     set(MIN_DEVKIT_TEST_FILES
         tests/standalone_test.cpp
@@ -389,7 +421,7 @@ if(BUILD_OSC_BRIDGE_TESTS)
         # tests/multi_instance_test.cpp
         # tests/performance_test.cpp
     )
-    
+
     # Catch2のインストール
     include(FetchContent)
     FetchContent_Declare(
@@ -398,28 +430,28 @@ if(BUILD_OSC_BRIDGE_TESTS)
         GIT_TAG v2.13.8 # M4L環境との互換性確認済み
     )
     FetchContent_MakeAvailable(Catch2)
-    
+
     # Catch2の検出とインクルード
     set(Catch2_SOURCE_DIR "${catch2_SOURCE_DIR}")
     set(Catch2_INCLUDE_DIR "${catch2_SOURCE_DIR}/single_include")
-    
+
     # テスト実行ファイルの設定
     add_executable(test_osc_bridge ${MIN_DEVKIT_TEST_FILES})
-    
+
     # インクルードディレクトリを明示的に追加
     target_include_directories(test_osc_bridge PRIVATE
         "${Catch2_INCLUDE_DIR}"
         "${Catch2_INCLUDE_DIR}/catch2"
         "${catch2_SOURCE_DIR}/include"
     )
-    
+
     # OSCpackとリンク
     if(DEFINED OSCPACK_LIB)
         target_link_libraries(test_osc_bridge PRIVATE "${OSCPACK_LIB}")
     else()
         target_link_libraries(test_osc_bridge PRIVATE "oscpack")
     endif()
-    
+
     # テストバイナリの出力先を設定
     set_target_properties(test_osc_bridge PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/tests"
@@ -429,7 +461,7 @@ endif()
 # Issue 24: Min-DevKit非依存のスタンドアロンテスト環境（新規）
 if(BUILD_OSC_BRIDGE_STANDALONE_TESTS)
     message(STATUS "Building standalone OSC Bridge tests without Min-DevKit dependency")
-    
+
     # tests/ディレクトリのCMakeListsを使用してスタンドアロンテストをビルド
     add_subdirectory(tests)
 endif()

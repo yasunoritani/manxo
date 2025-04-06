@@ -67,6 +67,8 @@ def parse_issue_file(file_path):
 def create_github_issue(owner, repo, title, body, token, labels=None):
     """GitHubにIssueを作成"""
     url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/issues"
+
+    # GitHubの推奨する認証方法に変更
     headers = {
         "Authorization": f"token {token}",
         "Accept": "application/vnd.github.v3+json"

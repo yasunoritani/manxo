@@ -1,0 +1,12 @@
+
+=================================
+OSC Bridge従来テスト実行レポート（Min-DevKit依存）
+実行日時: 2025年 4月 3日 木曜日 00時33分26秒 JST
+=================================
+
+環境設定情報:
+- Max SDKパス: /Users/mymac/v8ui/min-dev/min-devkit/source/min-api/max-sdk-base/c74support
+- テストバイナリ: test_osc_bridge
+- 実行ディレクトリ: /Users/mymac/v8ui/src/min-devkit/osc_bridge/build/tests
+
+🔍 フィルター '--verbose' でテストを実行

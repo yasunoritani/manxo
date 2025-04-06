@@ -117,7 +117,7 @@ MCPはAnthropicが開発したオープンプロトコルで、LLM（大規模�
       "command": "node",
       "args": ["max-mcp-server.js"],
       "env": {
-        "MAX_HOST": "127.0.0.1", 
+        "MAX_HOST": "127.0.0.1",
         "MAX_OSC_PORT": "7400",
         "MAX_ACCESS_LEVEL": "full",
         "MAX_VERSION": "8.2"
@@ -208,3 +208,29 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 ```
 
 本プロジェクトではC++ベースのアーキテクチャ実装と平行して、Min-DevKitフレームワークを活用した統合オーケストレーターやその他のコンポーネントを開発しています。
+
+## 8. プロジェクトドキュメント
+
+プロジェクトの詳細なドキュメントは以下のディレクトリに整理されています：
+
+### ドキュメント構造
+
+```
+docs/
+├── overview/          # プロジェクト概要と全体像
+├── issues/            # Issue詳細定義
+├── design/            # 設計ドキュメント
+├── specifications/    # 技術仕様
+├── development/       # 開発ガイドとルール
+├── planning/          # 計画と課題管理
+└── archives/          # アーカイブされた古いドキュメント
+```
+
+### 重要なドキュメント
+
+- [プロジェクト概要](docs/overview/v8ui_overview.md)
+- [実装Issue一覧](docs/issues/)
+- [開発ロードマップ](docs/development/development_roadmap.md)
+- [ビルド手順](docs/development/build_instructions.md)
+- [ディレクトリ構造](docs/development/directory_structure.md)
+- [プロジェクト現状](docs/design/project_current_state.md)
