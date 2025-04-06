@@ -1,0 +1,21 @@
+rule_type,pattern,description,severity,suggestion,example_fix,context_requirements
+performance,metro\\s+[1-9]\\d{0,1}$,メトロノームオブジェクトの更新間隔が短すぎます（100ms未満）。,warning,メトロノームの更新間隔は100ms以上に設定することをお勧めします。高頻度の更新はCPU負荷が高くなります。,metro 100,patcher
+performance,poly~.+voice\\s+[3-9]\\d+,poly~オブジェクトの音声数が多すぎます。,warning,poly~オブジェクトの音声数は必要最小限に保つことをお勧めします。CPU負荷が増大します。,poly~ mysynth 8,msp
+syntax,jit\\.gl\\.render\\s+@erase_color\\s+[^01],jit.gl.renderのerase_colorパラメータが正しくありません。,error,erase_colorパラメータには0または1を指定してください。,jit.gl.render @erase_color 1,jitter
+connection,dac~\\s+~,dac~オブジェクトにシグナル入力が接続されていません。,error,dac~オブジェクトにはシグナル（~で終わるオブジェクト）を接続する必要があります。,cycle~ 440 → dac~,msp
+memory,jit\\.matrix\\s+[^@]+$,jit.matrixオブジェクトのサイズが指定されていません。,warning,大きなマトリックスはメモリ使用量が増加します。@dim属性を使用してサイズを指定してください。,jit.matrix @dim 320 240,jitter
+syntax,\\[.+\\],角括弧で囲まれたオブジェクト名があります。,error,オブジェクト名を角括弧で囲むことはできません。括弧を削除してください。,metro 500 → [metro 500],patcher
+performance,delay\\s+[1-9]$,delayオブジェクトの遅延時間が短すぎます。,info,遅延時間が非常に短い場合、遅延効果が明確に現れない可能性があります。,delay 100,patcher
+syntax,metro\\s+[a-zA-Z]+,メトロノームオブジェクトに数値以外が指定されています。,error,metroオブジェクトには数値（ミリ秒）を指定する必要があります。,metro 500,patcher
+connection,route\\s+[^a-zA-Z0-9\\s],routeオブジェクトに無効な引数があります。,warning,routeオブジェクトには有効な識別子を指定してください。特殊文字は問題を引き起こす可能性があります。,route volume pitch,patcher
+memory,coll\\s+[^@]+$,collオブジェクトにファイル名が指定されていません。,warning,collオブジェクトはファイル名を指定しないと保存されません。@embedフラグまたはファイル名を追加してください。,coll mydictionary,patcher
+syntax,\\[\\]\\s*\\[,空の角括弧が連続して使用されています。,error,空の角括弧は無効なシンタックスです。正しいオブジェクト名を使用してください。,[metro 500],patcher
+connection,\\[trigger\\]\\s*\\[t\\]\\s*[a-z],triggerまたはtオブジェクトに無効な型指定があります。,error,triggerオブジェクトには有効な型（b=bang、f=float、i=int、l=list、s=symbol）を指定する必要があります。,trigger b f,patcher
+performance,jit\\.window\\s+@size\\s+\\d{4},jit.windowのサイズが大きすぎます。,warning,大きなウィンドウサイズはパフォーマンスに影響します。必要に応じてサイズを縮小してください。,jit.window @size 800 600,jitter
+syntax,\\[.+@.+@.+\\],複数の@記号を含むオブジェクト名があります。,error,属性指定に複数の@記号を使用することはできません。属性は@名前 値の形式で指定してください。,jit.window @size 640 480 @floating 1,jitter
+memory,dict\\s+[^@]+$,dictオブジェクトにファイル名が指定されていません。,warning,dictオブジェクトはファイル名を指定しないと保存されません。@embedフラグまたはファイル名を追加してください。,dict mydata,patcher
+performance,qmetro\\s+[1-9]\\d{0,1}$,qmetroオブジェクトの更新間隔が短すぎます（100ms未満）。,warning,qmetroの更新間隔は100ms以上に設定することをお勧めします。高頻度の更新はCPU負荷が高くなります。,qmetro 100,patcher
+syntax,if\\s+[^(].*then,if文の条件が括弧で囲まれていません。,warning,条件式は括弧で囲むことをお勧めします。明確性が向上し、優先順位の問題を避けられます。,if (x > 0) then,js
+connection,\\[\\+~\\]\\s*\\[\\-~\\],+~と-~オブジェクトが混在しています。,info,+~と-~の混在は計算ミスを引き起こす可能性があります。処理の流れを確認してください。,+~のみまたは-~のみを使用,msp
+memory,jit\\.matrix\\s+4\\s+char,4プレーンのcharマトリックスはメモリ使用量が多い傾向があります。,info,大きな画像データを扱う場合、メモリ使用量に注意してください。必要に応じてプレーン数や型を調整してください。,jit.matrix 3 char,jitter
+performance,\\[jit\\..*\\].*\\[jit\\..*\\].*\\[jit\\..*\\],複数のJitterオブジェクトが連続して使用されています。,info,多数のJitterオブジェクトを使用するとGPU/CPUリソースを消費します。必要に応じて最適化を検討してください。,必要なJitterオブジェクトのみ使用,jitter
