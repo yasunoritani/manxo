@@ -1,42 +1,49 @@
 /**
  * Max/MSP知識ベースAPIサーバー
  * SQLiteデータベースへのアクセスを提供し、知識検索APIを公開します
+ * Issue #010c 対応 - クエリエンジンとAPIの実装
  */
 
 const express = require('express');
-const Database = require('better-sqlite3');
+const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
 const path = require('path');
 
 // 設定
 const PORT = process.env.PORT || 3000;
-const DB_PATH = path.join(__dirname, 'max_knowledge.sqlite');
+const DB_PATH = path.join(__dirname, 'max_claude_kb.db');
+
+// プリペアドステートメントのキャッシュ
+const statements = {};
 
 // データベース接続
 let db;
 try {
-    db = new Database(DB_PATH, { verbose: process.env.NODE_ENV === 'development' });
+    db = new sqlite3.Database(DB_PATH, (err) => {
+        if (err) {
+            console.error('データベース接続エラー:', err.message);
+            process.exit(1);
+        }
+        console.log('Max知識ベースデータベースに接続しました');
 
-    // パフォーマンス最適化
-    db.pragma('journal_mode = WAL');
-    db.pragma('synchronous = NORMAL');
-    db.pragma('cache_size = 1000');
-    db.pragma('temp_store = MEMORY');
+        // データベース設定
+        db.serialize(() => {
+            db.run('PRAGMA journal_mode = WAL');
+            db.run('PRAGMA synchronous = NORMAL');
+            db.run('PRAGMA cache_size = 1000');
+            db.run('PRAGMA temp_store = MEMORY');
 
-    console.log('Max知識ベースデータベースに接続しました');
-
-    // データベース初期化時にインデックスを作成
-    db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_max_objects_name ON max_objects(name);
-        CREATE INDEX IF NOT EXISTS idx_max_objects_category ON max_objects(category);
-        CREATE INDEX IF NOT EXISTS idx_min_devkit_function_name ON min_devkit_api(function_name);
-        CREATE INDEX IF NOT EXISTS idx_connection_patterns_objects ON connection_patterns(source_object, destination_object);
-        CREATE INDEX IF NOT EXISTS idx_validation_rules_type ON validation_rules(rule_type);
-        CREATE INDEX IF NOT EXISTS idx_api_mapping_intent ON api_mapping(natural_language_intent);
-    `);
-
+            // インデックスの作成
+            db.run('CREATE INDEX IF NOT EXISTS idx_max_objects_name ON max_objects(name)');
+            db.run('CREATE INDEX IF NOT EXISTS idx_max_objects_category ON max_objects(category)');
+            db.run('CREATE INDEX IF NOT EXISTS idx_min_devkit_function_name ON min_devkit_api(function_name)');
+            db.run('CREATE INDEX IF NOT EXISTS idx_connection_patterns_objects ON connection_patterns(source_object, destination_object)');
+            db.run('CREATE INDEX IF NOT EXISTS idx_validation_rules_type ON validation_rules(rule_type)');
+            db.run('CREATE INDEX IF NOT EXISTS idx_api_mapping_intent ON api_mapping(natural_language_intent)');
+        });
+    });
 } catch (err) {
-    console.error('データベース接続エラー:', err.message);
+    console.error('データベース初期化エラー:', err.message);
     process.exit(1);
 }
 
@@ -48,6 +55,10 @@ const cache = {
     maxObjectsExpiry: {},
     search: {},
     searchExpiry: {},
+    validationRules: {},
+    validationRulesExpiry: {},
+    connectionPatterns: {},
+    connectionPatternsExpiry: {},
 };
 
 // キャッシュの有効期間（ミリ秒）
@@ -84,18 +95,70 @@ function setCache (key, value, subKey = null) {
     }
 }
 
-// プリペアドステートメントのキャッシュ
-const statements = {
-    // よく使われるクエリをプリペアしておく
-    getMaxObjectByName: db.prepare('SELECT * FROM max_objects WHERE name = ?'),
-    getAllCategories: db.prepare('SELECT DISTINCT category FROM max_objects ORDER BY category'),
-    getMaxObjectsByCategory: db.prepare('SELECT * FROM max_objects WHERE category = ? LIMIT ?'),
-    searchMaxObjects: db.prepare('SELECT * FROM max_objects WHERE name LIKE ? OR description LIKE ? LIMIT ?'),
-    searchMinDevkitApi: db.prepare('SELECT * FROM min_devkit_api WHERE function_name LIKE ? OR description LIKE ? LIMIT ?'),
-    searchConnectionPatterns: db.prepare('SELECT * FROM connection_patterns WHERE source_object LIKE ? OR destination_object LIKE ? OR description LIKE ? LIMIT ?'),
-    searchValidationRules: db.prepare('SELECT * FROM validation_rules WHERE rule_type LIKE ? OR description LIKE ? OR pattern LIKE ? LIMIT ?'),
-    searchApiMapping: db.prepare('SELECT am.*, mda.function_name FROM api_mapping am LEFT JOIN min_devkit_api mda ON am.min_devkit_function_id = mda.id WHERE am.natural_language_intent LIKE ? OR am.transformation_template LIKE ? LIMIT ?'),
-};
+// ステートメント準備関数
+function prepareStatement (sql) {
+    return {
+        all: (params, callback) => {
+            return new Promise((resolve, reject) => {
+                if (callback) {
+                    db.all(sql, params, callback);
+                } else {
+                    db.all(sql, params, (err, rows) => {
+                        if (err) reject(err);
+                        else resolve(rows);
+                    });
+                }
+            });
+        },
+        get: (params, callback) => {
+            return new Promise((resolve, reject) => {
+                if (callback) {
+                    db.get(sql, params, callback);
+                } else {
+                    db.get(sql, params, (err, row) => {
+                        if (err) reject(err);
+                        else resolve(row);
+                    });
+                }
+            });
+        },
+        run: (params, callback) => {
+            return new Promise((resolve, reject) => {
+                if (callback) {
+                    db.run(sql, params, callback);
+                } else {
+                    db.run(sql, params, function (err) {
+                        if (err) reject(err);
+                        else resolve(this);
+                    });
+                }
+            });
+        }
+    };
+}
+
+// ステートメントを初期化
+function initStatements () {
+    statements.getMaxObjectByName = prepareStatement('SELECT * FROM max_objects WHERE name = ?');
+    statements.getAllCategories = prepareStatement('SELECT DISTINCT category FROM max_objects ORDER BY category');
+    statements.getMaxObjectsByCategory = prepareStatement('SELECT * FROM max_objects WHERE category = ? LIMIT ?');
+    statements.searchMaxObjects = prepareStatement('SELECT * FROM max_objects WHERE name LIKE ? OR description LIKE ? LIMIT ?');
+    statements.searchMinDevkitApi = prepareStatement('SELECT * FROM min_devkit_api WHERE function_name LIKE ? OR description LIKE ? LIMIT ?');
+    statements.searchConnectionPatterns = prepareStatement('SELECT * FROM connection_patterns WHERE source_object LIKE ? OR destination_object LIKE ? OR description LIKE ? LIMIT ?');
+    statements.searchValidationRules = prepareStatement('SELECT * FROM validation_rules WHERE rule_type LIKE ? OR description LIKE ? OR pattern LIKE ? LIMIT ?');
+    statements.searchApiMapping = prepareStatement('SELECT am.*, mda.function_name FROM api_mapping am LEFT JOIN min_devkit_api mda ON am.min_devkit_function_id = mda.id WHERE am.natural_language_intent LIKE ? OR am.transformation_template LIKE ? LIMIT ?');
+
+    // 追加クエリ
+    statements.getConnectionPattern = prepareStatement('SELECT * FROM connection_patterns WHERE source_object = ? AND destination_object = ? AND source_outlet = ? AND destination_inlet = ?');
+    statements.getFunctionsByReturnType = prepareStatement('SELECT * FROM min_devkit_api WHERE return_type = ? LIMIT ?');
+    statements.getValidationRulesByType = prepareStatement('SELECT * FROM validation_rules WHERE rule_type = ? LIMIT ?');
+    statements.getApiMappingByIntent = prepareStatement('SELECT am.*, mda.function_name, mda.signature, mda.description AS function_description FROM api_mapping am LEFT JOIN min_devkit_api mda ON am.min_devkit_function_id = mda.id WHERE am.natural_language_intent LIKE ? LIMIT ?');
+    statements.getRecommendedConnections = prepareStatement('SELECT * FROM connection_patterns WHERE is_recommended = 1 LIMIT ?');
+    statements.getAudioConnections = prepareStatement('SELECT * FROM connection_patterns WHERE audio_signal_flow = 1 LIMIT ?');
+}
+
+// ステートメントの初期化（データベース接続後に実行）
+setTimeout(initStatements, 1000);
 
 // Expressアプリケーション
 const app = express();
@@ -114,9 +177,33 @@ app.use((req, res, next) => {
     next();
 });
 
+// APIエラーハンドリング関数
+function handleApiError (res, err, statusCode = 500) {
+    console.error('API Error:', err);
+    res.status(statusCode).json({
+        error: err.message,
+        status: 'error',
+        timestamp: new Date().toISOString()
+    });
+}
+
 // APIヘルスチェック
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', message: 'Max知識ベースAPIサーバー稼働中' });
+    try {
+        // クイックデータベースクエリで接続を確認
+        const result = db.prepare('SELECT COUNT(*) as count FROM max_objects').get();
+        const dbStatus = result && result.count > 0 ? 'connected' : 'error';
+
+        res.json({
+            status: 'ok',
+            message: 'Max知識ベースAPIサーバー稼働中',
+            database: dbStatus,
+            timestamp: new Date().toISOString(),
+            version: '1.0.0'
+        });
+    } catch (err) {
+        handleApiError(res, err);
+    }
 });
 
 // Maxオブジェクト関連API
@@ -137,7 +224,7 @@ app.get('/api/max-objects/categories', (req, res) => {
 
         res.json(categories);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        handleApiError(res, err);
     }
 });
 
@@ -162,7 +249,7 @@ app.get('/api/max-objects/:name', (req, res) => {
 
         res.json(row);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        handleApiError(res, err);
     }
 });
 
@@ -219,7 +306,7 @@ app.get('/api/max-objects', (req, res) => {
 
         res.json(rows);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        handleApiError(res, err);
     }
 });
 
@@ -230,6 +317,12 @@ app.get('/api/min-devkit', (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
 
     try {
+        // 戻り値の型によるフィルタリングが指定されている場合
+        if (returnType && !query) {
+            const rows = statements.getFunctionsByReturnType.all(returnType, limit);
+            return res.json(rows);
+        }
+
         let sql = 'SELECT * FROM min_devkit_api WHERE 1=1';
         const params = [];
 
@@ -249,7 +342,7 @@ app.get('/api/min-devkit', (req, res) => {
         const rows = db.prepare(sql).all(...params);
         res.json(rows);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        handleApiError(res, err);
     }
 });
 
@@ -263,7 +356,7 @@ app.get('/api/min-devkit/:functionName', (req, res) => {
         }
         res.json(row);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        handleApiError(res, err);
     }
 });
 
@@ -271,9 +364,23 @@ app.get('/api/min-devkit/:functionName', (req, res) => {
 app.get('/api/connection-patterns', (req, res) => {
     const sourceObject = req.query.source || '';
     const destObject = req.query.destination || '';
+    const isRecommended = req.query.recommended === 'true';
+    const isAudio = req.query.audio === 'true';
     const limit = parseInt(req.query.limit) || 50;
 
     try {
+        // 推奨接続パターンのみを取得
+        if (isRecommended && !sourceObject && !destObject) {
+            const rows = statements.getRecommendedConnections.all(limit);
+            return res.json(rows);
+        }
+
+        // オーディオシグナルフローのみを取得
+        if (isAudio && !sourceObject && !destObject) {
+            const rows = statements.getAudioConnections.all(limit);
+            return res.json(rows);
+        }
+
         let sql = 'SELECT * FROM connection_patterns WHERE 1=1';
         const params = [];
 
@@ -287,13 +394,87 @@ app.get('/api/connection-patterns', (req, res) => {
             params.push(`%${destObject}%`);
         }
 
+        if (isRecommended) {
+            sql += ' AND is_recommended = 1';
+        }
+
+        if (isAudio) {
+            sql += ' AND audio_signal_flow = 1';
+        }
+
         sql += ' LIMIT ?';
         params.push(limit);
 
         const rows = db.prepare(sql).all(...params);
         res.json(rows);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        handleApiError(res, err);
+    }
+});
+
+// 接続検証API
+app.get('/api/validate-connection', (req, res) => {
+    const sourceObject = req.query.source;
+    const destinationObject = req.query.destination;
+    const sourceOutlet = parseInt(req.query.source_outlet || '0');
+    const destinationInlet = parseInt(req.query.destination_inlet || '0');
+
+    if (!sourceObject || !destinationObject) {
+        return res.status(400).json({
+            error: 'ソースオブジェクトと送信先オブジェクトの両方が必要です'
+        });
+    }
+
+    try {
+        const cacheKey = `${sourceObject}_${sourceOutlet}_${destinationObject}_${destinationInlet}`;
+        const cachedResult = getCache('connectionPatterns', cacheKey);
+
+        if (cachedResult) {
+            return res.json(cachedResult);
+        }
+
+        // 完全一致する接続パターンを探す
+        const pattern = statements.getConnectionPattern.get(
+            sourceObject,
+            destinationObject,
+            sourceOutlet,
+            destinationInlet
+        );
+
+        if (pattern) {
+            const result = {
+                valid: true,
+                pattern: pattern,
+                is_recommended: Boolean(pattern.is_recommended),
+                audio_signal_flow: Boolean(pattern.audio_signal_flow)
+            };
+
+            // キャッシュに保存
+            setCache('connectionPatterns', result, cacheKey);
+
+            return res.json(result);
+        }
+
+        // 完全一致するパターンが見つからない場合、類似パターンを探す
+        const similarPatterns = statements.searchConnectionPatterns.all(
+            `%${sourceObject}%`,
+            `%${destinationObject}%`,
+            '',
+            10
+        );
+
+        const result = {
+            valid: false,
+            message: '特定の接続パターンが見つかりませんでした',
+            similar_patterns: similarPatterns
+        };
+
+        // キャッシュに保存
+        setCache('connectionPatterns', result, cacheKey);
+
+        res.json(result);
+    } catch (err) {
+        handleApiError(res, err);
     }
 });
 
@@ -304,6 +485,20 @@ app.get('/api/validation-rules', (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
 
     try {
+        // タイプによるフィルタリングが指定されている場合はキャッシュを活用
+        if (ruleType && !severity) {
+            const cacheKey = `type_${ruleType}_limit_${limit}`;
+            const cachedRules = getCache('validationRules', cacheKey);
+
+            if (cachedRules) {
+                return res.json(cachedRules);
+            }
+
+            const rows = statements.getValidationRulesByType.all(ruleType, limit);
+            setCache('validationRules', rows, cacheKey);
+            return res.json(rows);
+        }
+
         let sql = 'SELECT * FROM validation_rules WHERE 1=1';
         const params = [];
 
@@ -323,7 +518,61 @@ app.get('/api/validation-rules', (req, res) => {
         const rows = db.prepare(sql).all(...params);
         res.json(rows);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        handleApiError(res, err);
+    }
+});
+
+// コード検証API
+app.post('/api/validate-code', (req, res) => {
+    const { code, context } = req.body;
+
+    if (!code) {
+        return res.status(400).json({ error: '検証するコードが必要です' });
+    }
+
+    try {
+        // まず適切な検証ルールを取得
+        let ruleQuery = 'SELECT * FROM validation_rules WHERE 1=1';
+        const params = [];
+
+        if (context) {
+            ruleQuery += ' AND (context_requirements LIKE ? OR context_requirements IS NULL)';
+            params.push(`%${context}%`);
+        }
+
+        const rules = db.prepare(ruleQuery).all(...params);
+        const issues = [];
+
+        // 各ルールでコードをチェック
+        rules.forEach(rule => {
+            try {
+                const regex = new RegExp(rule.pattern, 'g');
+                const matches = code.match(regex);
+
+                if (matches) {
+                    issues.push({
+                        rule_id: rule.id,
+                        rule_type: rule.rule_type,
+                        severity: rule.severity,
+                        description: rule.description,
+                        suggestion: rule.suggestion,
+                        example_fix: rule.example_fix,
+                        matches: matches.length
+                    });
+                }
+            } catch (error) {
+                console.error(`正規表現エラー (${rule.pattern}): ${error.message}`);
+            }
+        });
+
+        res.json({
+            valid: issues.length === 0,
+            issues: issues,
+            total_issues: issues.length,
+            code_length: code.length
+        });
+    } catch (err) {
+        handleApiError(res, err);
     }
 });
 
@@ -333,6 +582,11 @@ app.get('/api/api-mapping', (req, res) => {
     const limit = parseInt(req.query.limit) || 50;
 
     try {
+        if (query) {
+            const mappings = statements.getApiMappingByIntent.all(`%${query}%`, limit);
+            return res.json(mappings);
+        }
+
         let sql = 'SELECT am.*, mda.function_name FROM api_mapping am ' +
             'LEFT JOIN min_devkit_api mda ON am.min_devkit_function_id = mda.id ' +
             'WHERE 1=1';
@@ -349,7 +603,7 @@ app.get('/api/api-mapping', (req, res) => {
         const rows = db.prepare(sql).all(...params);
         res.json(rows);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        handleApiError(res, err);
     }
 });
 
@@ -407,7 +661,74 @@ app.post('/api/search', (req, res) => {
 
         res.json(results);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        handleApiError(res, err);
+    }
+});
+
+// Node for Max統合API
+app.post('/api/node-for-max/query', (req, res) => {
+    const { action, params } = req.body;
+
+    if (!action) {
+        return res.status(400).json({ error: '実行するアクションが必要です' });
+    }
+
+    try {
+        let result = null;
+
+        switch (action) {
+            case 'get_max_object':
+                if (!params.name) {
+                    return res.status(400).json({ error: 'オブジェクト名が必要です' });
+                }
+                result = statements.getMaxObjectByName.get(params.name);
+                break;
+
+            case 'check_connection':
+                if (!params.source || !params.destination) {
+                    return res.status(400).json({ error: 'ソースと送信先が必要です' });
+                }
+                result = statements.getConnectionPattern.get(
+                    params.source,
+                    params.destination,
+                    params.source_outlet || 0,
+                    params.destination_inlet || 0
+                );
+                break;
+
+            case 'search_max_objects':
+                result = statements.searchMaxObjects.all(
+                    `%${params.query || ''}%`,
+                    `%${params.query || ''}%`,
+                    params.limit || 10
+                );
+                break;
+
+            case 'find_api_by_intent':
+                result = statements.getApiMappingByIntent.all(
+                    `%${params.intent || ''}%`,
+                    params.limit || 5
+                );
+                break;
+
+            case 'validate_rules':
+                result = statements.getValidationRulesByType.all(
+                    params.rule_type || 'syntax',
+                    params.limit || 20
+                );
+                break;
+
+            default:
+                return res.status(400).json({ error: '不明なアクション: ' + action });
+        }
+
+        res.json({
+            status: 'success',
+            action: action,
+            result: result
+        });
+    } catch (err) {
+        handleApiError(res, err);
     }
 });
 
