@@ -6,10 +6,21 @@
 const path = require('path');
 const sqlite3 = require('sqlite3').verbose();
 const osc = require('node-osc');
-const Max = require('max-api');
+// Max APIが必要な場合はコメントを外す
+// const Max = require('max-api');
+
+// Maxの代わりにコンソール出力
+const MaxConsole = {
+    post: function (message, type) {
+        console.log(`[${type || 'info'}] ${message}`);
+    }
+};
+
+// 実際のMax APIかコンソール出力か決定
+const Max = global.Max || MaxConsole;
 
 // 設定
-const DB_FILE = path.join(__dirname, 'max_knowledge.sqlite');
+const DB_FILE = path.join(__dirname, 'max_claude_kb.db');
 const OSC_SERVER_PORT = 7400;
 const OSC_CLIENT_PORT = 7500;
 const OSC_HOST = '127.0.0.1';
