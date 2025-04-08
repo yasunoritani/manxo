@@ -28,9 +28,9 @@
    npm start
    ```
 
-2. **Claude Desktopを起動し、MCPサーバーに接続**
-   - Claude Desktopで新しい会話を開始
-   - MCPツールを選択して接続
+2. **Claude Desktopで使用**
+   - 起動したMCPサーバーは自動的にClaude Desktopと連携
+   - Claude Desktopは自動的にMCPサーバーの機能を検出・利用可能
 
 3. **自然言語で指示を入力**
    - 例：「サイン波オシレーターを作成して、ローパスフィルターにつないで」
