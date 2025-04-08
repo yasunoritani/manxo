@@ -1,134 +1,124 @@
-# Max-Claude 連携プロジェクト
+# Max-Claude連携プロジェクト
 
-![プロジェクトロゴ](assets/logo.png)
+## プロジェクト概要
 
-## このプロジェクトについて
+本プロジェクトは、Claude DesktopのAI機能とMax/MSPのサウンドプログラミング環境を連携させるシステムです。ユーザーは自然言語でMax/MSPの操作や音楽生成の指示を出すことができます。
 
-**Max-Claude連携プロジェクト**は、Max/MSPプログラミングの専門知識がなくても、AIの力を使って音楽・サウンド制作を行えるようにするシステムです。
+## システム構成
 
-**シンプルな例**:
-> 「サイン波オシレーターを作成して、ローパスフィルターにつないで」
+システムは以下の3つの主要コンポーネントで構成されています：
 
-このような自然言語の指示だけで、Maxパッチが自動的に作成されます。
+1. **MCPサーバー（Node.js）**：
+   - Claude DesktopとのMCP（Model Context Protocol）通信を担当
+   - JSON形式でのデータやり取り
+   - SQL知識ベースへのクエリと結果処理
 
-## 核となる3つの技術
+2. **SQL知識ベース**：
+   - Max/MSPのオブジェクト情報
+   - 接続パターンのバリデーション
+   - 修正提案の生成
 
-![システム概要](assets/system_overview.png)
+3. **Min-DevKit（C++）**：
+   - Max/MSPへの直接アクセス
+   - MCPサーバーからの命令をMax/MSP操作に変換
+   - C++ベースの高速処理
 
-1. **Claude Desktop (LLM)**: ユーザーの意図を理解し、適切な指示に変換します
-2. **SQL知識ベース**: Max/MSPとMin-DevKitの専門知識を格納し、AIの判断を支援します
-3. **Min-DevKit (C++)**: Max/MSPを直接操作する橋渡しを行います
+## セットアップ方法
 
-## 使い方
+### 前提条件
 
-### 1. MCPサーバーの設定
+- Max/MSP 8以降
+- Node.js 14以降
+- C++開発環境（Min-DevKit用）
+- Claude Desktop
+
+### インストール手順
 
 1. **リポジトリのクローン**
    ```bash
-   git clone https://github.com/yourusername/v8ui.git
-   cd v8ui
+   git clone https://github.com/yourusername/max-claude-integration.git
+   cd max-claude-integration
    npm install
    ```
 
-2. **MCPサーバーの設定ファイルを作成**
-   Claude Desktopの設定ファイルにMCPサーバーを追加します：
-
-   Macの場合:
+2. **MCPサーバーの設定**
    ```bash
-   # 設定ディレクトリがない場合は作成
+   # Claude Desktopの設定ファイルディレクトリ作成
    mkdir -p ~/Library/Application\ Support/Claude/
 
-   # 設定ファイルを編集
+   # 設定ファイル編集
    nano ~/Library/Application\ Support/Claude/claude_desktop_config.json
    ```
 
-   以下の内容を追加:
+   以下の内容を設定ファイルに追加：
    ```json
    {
      "mcp": {
        "servers": [
          {
            "name": "Max Knowledge Base",
-           "command": "node /path/to/v8ui/src/sql_knowledge_base/mcp-server.js"
+           "command": "node /path/to/max-claude-integration/src/sql_knowledge_base/mcp-server.js"
          }
        ]
      }
    }
    ```
 
-### 2. Claude Desktopでの使用
+3. **Min-DevKitのビルド（開発者向け）**
+   ```bash
+   cd src/min-devkit
+   cmake .
+   make
+   ```
+
+## 使い方
 
 1. **Claude Desktopを起動（または再起動）**
    - 設定を反映させるためにClaude Desktopを再起動します
 
 2. **MCPツールの確認**
-   - メッセージの入力欄の上部でMCPツールが表示されていることを確認します
+   - Claude Desktopの入力欄上部でMCPツールが表示されていることを確認
    - 「Max Knowledge Base」が利用可能なMCPツールとして表示されます
 
 3. **Max/MSPに関する質問や指示を入力**
    - 例：「サイン波オシレーターを作成して、ローパスフィルターにつないで」
-   - Claude Desktopが自動的にSQLデータベースを参照して適切な回答を生成します
+   - Claude Desktopが自動的にSQL知識ベースと連携して回答・操作を行います
 
-## 主な機能
+## 技術詳細
 
-- **自然言語→Maxパッチ変換**: 日常言語でMax/MSPプログラミング
-- **音楽的意図の理解**: 音楽理論やサウンドデザインの専門用語に対応
-- **自動検証**: SQL知識ベースを用いた最適なオブジェクト選択と接続検証
-- **修正提案**: 生成したパッチの問題点を検出し改善案を提示
+### MCPプロトコル
 
-## MCPプロトコルについて
+Model Context Protocol (MCP) はAnthropicが開発したオープンスタンダードで、AIモデルと外部ツールを安全に接続するプロトコルです。本プロジェクトでは、MCPを使用してClaude DesktopとMax/MSP関連の知識・操作機能を連携させています。
 
-**Model Context Protocol (MCP)** はAnthropicが開発したオープンスタンダードで、AIモデルと外部データソースやツールを安全に接続するためのプロトコルです。USB-Cが様々な周辺機器を標準化された方法で接続するように、MCPはAIと外部システムの接続を標準化します。
+### Min-DevKit
 
-本プロジェクトでは、MCPを通じてClaude DesktopとSQL知識ベースを連携させ、Max/MSPプログラミングに関する専門知識をLLMに提供しています。
+Min-DevKitはCycling '74が提供する現代的なC++フレームワークで、Max/MSPの拡張開発を容易にします。本プロジェクトでは、Min-DevKitを使用してClaude Desktopからの命令をMax/MSP内部で実行可能な形式に変換し、直接操作を行います。
 
-## MCPとMin-DevKit連携
+### データフロー
 
-以下の方法で、MCPプロトコルとMin-DevKitを連携します：
-
-1. **MCPサーバー（Node.js）**: Claude DesktopとJSON形式で通信
-2. **SQL知識ベース連携**:
-   - 命令・コードの検証（SQLiteデータベースを使用）
-   - Max/MSPオブジェクト情報の参照
-   - 接続パターンの妥当性チェック
-   - 修正提案の生成
-3. **ブリッジレイヤー**: JSON→C++データ構造への変換と検証結果の適用
-4. **Min-DevKit連携**: 検証されたC++データ構造を使ってMin-DevKit APIを直接呼び出し
-5. **実行レイヤー**: Max内部APIを活用した処理の実行
-6. **結果のフィードバック**: 実行結果と検証情報をJSONに変換してClaude Desktopに返却
-
-## システムの仕組み
-
-1. **ユーザー** → Claude Desktopで質問や指示を入力
-2. **Claude** → 自動的にMCPを通じてSQL知識ベースに問い合わせ
-3. **知識ベース** → Max/MSPとMin-DevKitの情報を提供
-4. **Claude** → 情報を活用してパッチ生成の指示を作成
-5. **ブリッジレイヤー** → 指示をC++データ構造に変換
-6. **Min-DevKit** → APIを使用してMax/MSP内部操作を実行
-7. **結果** → ユーザーにMaxパッチを提案
-
-## ドキュメント
-
-- [シンプル版要件定義](docs/requirements_simplified.md) ← **まずはこれを読むことをお勧めします**
-- [SQL知識ベース実装詳細](docs/sql_knowledge_base_implementation.md)
-- [詳細版要件定義書](docs/specifications/requirements_min_devkit.md)
+1. ユーザーがClaude Desktopに自然言語で指示
+2. Claude Desktopが指示を理解し、MCPプロトコルを通じてサーバーに問い合わせ
+3. MCPサーバーがSQL知識ベースを参照して適切な操作を決定
+4. 操作命令がMin-DevKitを通じてMax/MSPに伝達
+5. Max/MSPが操作を実行し、結果をフィードバック
+6. 結果情報がClaude Desktopに返され、ユーザーに提示
 
 ## 開発状況
 
 現在進行中の課題:
-- SQL知識ベースによる検証精度の向上
-- より複雑なパッチパターンへの対応
-- ユーザーフィードバックの改善
+- SQL知識ベースの拡充
+- Min-DevKit連携の安定化
+- ユーザーインターフェースの改善
 
-## 貢献方法
+## ドキュメント
 
-1. このリポジトリをフォーク
-2. 機能追加やバグ修正のブランチを作成
-3. 変更をコミット
-4. プルリクエストを送信
+- [技術仕様書](docs/specifications/technical_specs.md)
+- [Min-DevKit実装詳細](docs/min-devkit_implementation.md)
+- [SQL知識ベース構造](docs/sql_database_schema.md)
 
 ## ライセンス
 
-このプロジェクトは[MIT License](LICENSE)のもとで公開されています。
+本プロジェクトはMITライセンスで提供されています。
 
-使用している[Min-DevKit](https://github.com/Cycling74/min-devkit)もMITライセンスで提供されています。
+Min-DevKitはCycling '74によるMITライセンスのソフトウェアです。
+Copyright © 2016-2022, Cycling '74
