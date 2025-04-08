@@ -1,75 +1,84 @@
-# Max-Claude MCP Integration
+# ✨ Manxo - AI駆動型Maxパッチジェネレーター ✨
 
-This project provides integration between Claude AI and Max/MSP through Model Context Protocol (MCP). It consists of two main components:
+![Max Meets AI](https://img.shields.io/badge/Max%20Meets%20AI-%F0%9F%8E%B5%20%F0%9F%A4%96-blueviolet)
+![Built with Love](https://img.shields.io/badge/Built%20with-%E2%9D%A4%EF%B8%8F-red)
+![Kawaii Factor](https://img.shields.io/badge/Kawaii%20Factor-%E2%98%85%E2%98%85%E2%98%85%E2%98%85%E2%98%85-pink)
 
-1. **SQL Knowledge Base**: A database containing information about Max objects, connection patterns, and validation rules
-2. **Maxpat Generator**: A tool for generating Max patch files (.maxpat) based on specifications
+## 💫 プロジェクト概要
 
-## Features
+Manxoは、ClaudeのAI能力とMax/MSPの創造性を組み合わせた魔法のようなプロジェクト！🪄✨
 
-- **Object Information**: Lookup and search for Max/MSP objects
-- **Connection Patterns**: Check valid connections between objects
-- **Maxpat Generation**: Create Max patches from templates or custom specifications
-- **Validation Rules**: Check for common errors and best practices
+自然言語からMaxパッチを自動生成するAI駆動型システムで、音楽制作やメディアアートの世界に革命を起こします。
 
-## Getting Started
+### 🌟 主な機能
 
-### Prerequisites
+- 💬 **自然言語からパッチ生成**: 「ボイスエフェクト付きシンセサイザー作って」だけでパッチ完成！
+- 🔍 **ベクトル検索**: 意味を理解するセマンティック検索でぴったりのオブジェクトを発見
+- 🧩 **パターン認識**: よく使われる接続パターンを学習して最適な構成を提案
+- 🛠️ **テンプレート**: オーディオ・ビデオ処理用の特製テンプレートを用意
+- 🔄 **自己修正機能**: 生成したパッチを自動検証&修正
 
-- Node.js 14.x or later
+## 🚀 はじめ方
+
+### 📋 必要なもの
+
+- Node.js 14.x以上
 - SQLite 3.x
-- Claude Desktop with MCP support
+- MCPサポート付きのClaude Desktop
 
-### Installation
+### 💻 インストール方法
 
-1. Clone this repository:
-   ```
+1. リポジトリをクローン:
+   ```bash
    git clone https://github.com/yasunoritani/manxo.git
    cd manxo
    ```
 
-2. Install dependencies:
-   ```
+2. 依存パッケージをインストール:
+   ```bash
    npm install
    ```
 
-### Usage
+### 🎮 使い方
 
-#### Start the integrated MCP server:
+#### 🪄 AIパッチジェネレーターを起動:
 
-```
-npm start
-```
-
-#### Start only the SQL knowledge base:
-
-```
-npm run start:sql
-```
-
-#### Generate a Max patch:
-
-```
+```bash
 npm run start:generator
 ```
 
-## MCP Tools
+#### 🧠 SQLナレッジベースのみ起動:
 
-The following MCP tools are available:
+```bash
+npm run start:sql
+```
 
-### Knowledge Base Tools
+#### 🔌 MCPサーバー全体を起動:
 
-- `getMaxObject`: Get detailed information about a Max object
-- `searchMaxObjects`: Search for Max objects by name or description
-- `checkConnectionPattern`: Validate connections between objects
-- `searchConnectionPatterns`: Find common connection patterns
+```bash
+npm start
+```
 
-### Maxpat Generator Tools
+## 🛠️ MCPツール一覧
 
-- `generateMaxPatch`: Create a basic Max patch from a template
-- `listTemplates`: Get a list of available templates
-- `createAdvancedPatch`: Generate a complex patch with custom objects and connections
+### 🔍 ナレッジベースツール
 
-## License
+- `getMaxObject` → Maxオブジェクトの詳細情報を取得 📚
+- `searchMaxObjects` → オブジェクトを名前や説明で検索 🔎
+- `checkConnectionPattern` → オブジェクト間の接続を検証 ✅
+- `searchConnectionPatterns` → よく使われる接続パターンを検索 🔄
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+### 🎨 パッチジェネレーターツール
+
+- `generateMaxPatch` → テンプレートからパッチを生成 ✨
+- `generateFromDescription` → 自然言語からパッチを生成 💬
+- `listTemplates` → 利用可能なテンプレート一覧を取得 📋
+
+## 💌 ライセンス
+
+このプロジェクトはMITライセンスの下で公開されています。詳細はLICENSEファイルをご覧ください。
+
+## 🙏 謝辞
+
+このプロジェクトは、Max/MSPコミュニティの知恵と、AIの可能性を組み合わせることで実現しました。
+すべての音楽家、アーティスト、開発者に感謝します！🎵✨
