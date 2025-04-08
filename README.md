@@ -2,33 +2,40 @@
 
 ## プロジェクト概要
 
-本プロジェクトは、自然言語の指示から直接Max/MSPパッチファイル(`.maxpat`)やMax for Liveデバイス(`.amxd`)を生成するAIシステムです。ユーザーは音楽制作やサウンドデザインのアイデアを自然言語で表現するだけで、すぐに使えるMaxパッチを入手できます。
+本プロジェクトは、自然言語の指示から直接Max/MSPパッチファイル(`.maxpat`)やMax for Liveデバイス(`.amxd`)を生成するAIシステムです。音楽制作者やサウンドデザイナーは、プログラミングの詳細な知識がなくても、自分のアイデアを言葉で表現するだけですぐに使えるMaxパッチを入手できます。
 
 ## 主な機能
 
 - **自然言語→Maxパッチ変換**: 日常言語での説明から完全なMaxパッチを生成
 - **Max for Live対応**: Ableton Live用のデバイス(`.amxd`)ファイル生成
 - **AIによるパッチ設計**: 音楽理論やDSP知識に基づいた最適なパッチ構造の提案
+- **SQL知識ベースによる支援**: 専門的な接続パターンと最適なオブジェクト選択
 - **即時利用可能**: 生成されたパッチファイルはすぐにMaxまたはAbleton Liveで開いて使用可能
 
 ## システム構成
 
-システムは以下の主要コンポーネントで構成されています：
+システムは以下の主要コンポーネントから構成されています：
 
-1. **MCPサーバー**:
-   - Claude DesktopとのMCP通信
-   - 自然言語からMaxパッチ構造への変換処理
-   - JSONパッチファイル生成エンジン
+1. **Claude Desktop**:
+   - 自然言語処理を担当
+   - ユーザーの音楽制作・サウンドデザインの指示を理解
+   - SQL知識ベースと連携して最適な実装を決定
 
-2. **SQL知識ベース**:
-   - Max/MSPオブジェクト情報（パラメータ、接続ポイントなど）
-   - 一般的な接続パターンやテンプレート
-   - オブジェクト間の互換性情報
+2. **MCP (Model Context Protocol)**:
+   - Claude Desktopとパッチ生成システム間の通信を担当
+   - ツール機能を通じてパッチ生成をトリガー
+   - 双方向フィードバックを実現
 
-3. **Max/MSP構造モデル**:
-   - `.maxpat`と`.amxd`のJSON構造テンプレート
-   - 一般的なパッチパターンのライブラリ
-   - Min-DevKit APIの知識を活用したオブジェクト挙動モデル
+3. **SQL知識ベース**:
+   - Max/MSPオブジェクト情報（561種類）
+   - 接続パターン（201パターン）
+   - 検証ルール（105ルール）
+   - 自然言語意図マッピング（160マッピング）
+
+4. **パッチ生成エンジン**:
+   - JSONベースのmaxpatファイルを直接生成
+   - オブジェクト間の接続を適切に構築
+   - UIレイアウトを最適化
 
 ## セットアップ方法
 
@@ -37,19 +44,27 @@
 - Node.js 14以降
 - Claude Desktop
 - Max/MSP 8以降（生成されたパッチを開くため）
+- SQLite3
+- Python 3.x（データインポート用）
 
 ### インストール手順
 
 1. **リポジトリのクローン**
    ```bash
-   git clone https://github.com/yourusername/max-claude-patchgen.git
-   cd max-claude-patchgen
+   git clone https://github.com/yasunoritani/manxo.git
+   cd manxo
    npm install
    ```
 
-2. **MCPサーバーの設定**
+2. **SQL知識ベースの初期化**
    ```bash
-   # Claude Desktopの設定ファイルディレクトリ作成
+   cd src/sql_knowledge_base
+   python import_data.py
+   ```
+
+3. **MCPサーバーの設定**
+   ```bash
+   # Claude Desktopの設定ファイルディレクトリ作成（macOS）
    mkdir -p ~/Library/Application\ Support/Claude/
 
    # 設定ファイル編集
@@ -63,16 +78,16 @@
        "servers": [
          {
            "name": "Max Patch Generator",
-           "command": "node /path/to/max-claude-patchgen/src/mcp-server.js"
+           "command": "node /path/to/manxo/src/mcp-server.js"
          }
        ]
      }
    }
    ```
 
-3. **SQLデータベースの初期化**
+4. **MCPサーバーの起動**
    ```bash
-   node src/db/init-database.js
+   node src/mcp-server.js
    ```
 
 ## 使い方
@@ -95,36 +110,80 @@
 
 ## 技術詳細
 
-### パッチ生成プロセス
+### システムフロー
 
-1. **自然言語解析**: ユーザーの指示から必要なオブジェクト、接続、パラメータを抽出
-2. **パッチ構造設計**: 音響プロセッシングの原則に基づいて最適なオブジェクト構成を決定
-3. **JSON構造生成**: Maxパッチファイル形式（JSON）に変換
-4. **ポストプロセス**: オブジェクト配置の最適化、自動レイアウト調整
+1. **ユーザーの意図理解**:
+   - Claude Desktopがユーザーの自然言語指示を解析
+   - 必要なオブジェクトと機能の特定
+
+2. **SQL知識ベース問い合わせ**:
+   - 必要なMax/MSPオブジェクトの検索
+   - 適切な接続パターンの特定
+   - パラメータ設定の最適値取得
+
+3. **パッチ構造設計**:
+   - 信号フローの論理的構成
+   - オブジェクト間の接続設計
+   - UIエレメントの配置計画
+
+4. **JSONファイル生成**:
+   - Max/MSPのJSON形式に変換
+   - オブジェクトとパラメータの設定
+   - 接続情報の生成
+
+5. **レイアウト最適化**:
+   - UIの使いやすさを考慮した配置
+   - 視覚的なグルーピング
+   - スケーリングと位置調整
+
+### SQL知識ベース構造
+
+SQLiteデータベースには以下のテーブルが定義されています：
+
+1. **max_objects**: Max/MSPオブジェクト情報
+   - id, name, description, category, inlets, outlets, is_ui_object等
+
+2. **connection_patterns**: オブジェクト接続パターン
+   - source_object, source_outlet, destination_object, destination_inlet等
+
+3. **validation_rules**: 検証ルール情報
+   - rule_type, pattern, description, severity等
+
+4. **api_mapping**: 自然言語意図とパターン関数のマッピング
+   - natural_language_intent, pattern_id等
 
 ### Max/MSPパッチファイル構造
 
-Maxパッチ(`.maxpat`)とMax for Liveデバイス(`.amxd`)は基本的にJSON形式のテキストファイルです。システムはMin-DevKitの知識を活用し、有効なJSON構造を生成します。パッチファイルには以下の要素が含まれます：
+Maxパッチ(`.maxpat`)とMax for Liveデバイス(`.amxd`)は基本的にJSON形式のテキストファイルです。パッチファイルには以下の要素が含まれます：
 
 - オブジェクト定義（種類、位置、パラメータなど）
 - オブジェクト間の接続情報
 - UIエレメント（スライダー、ボタンなど）の定義
 - パッチの全体設定（サイズ、表示オプションなど）
 
+## MCPプロトコルについて
+
+**Model Context Protocol (MCP)** はAnthropicが開発したオープンスタンダードで、AIモデルと外部データソースやツールを安全に接続するためのプロトコルです。USB-Cが様々な周辺機器を標準化された方法で接続するように、MCPはAIと外部システムの接続を標準化します。
+
+本プロジェクトでは、MCPを通じてClaude DesktopとSQL知識ベースを連携させ、Max/MSPプログラミングに関する専門知識をLLMに提供しています。
+
 ## 開発状況
 
 現在進行中の課題:
 - より複雑なパッチ構造のサポート
 - UI要素の洗練化
+- SQL知識ベースの拡充（特に接続パターンと検証ルール）
 - 様々な音楽ジャンル向けテンプレートの拡充
 - Max for Liveデバイスのカスタムスキン対応
 
 ## ドキュメント
 
+詳細は以下のドキュメントを参照してください：
+- [シンプル版要件定義](docs/requirements_simplified.md)
+- [SQL知識ベース実装詳細](docs/sql_knowledge_base_implementation.md)
+- [実装状況](docs/implementation_status.md)
 - [パッチ構造リファレンス](docs/patch_structure.md)
 - [サポートされているオブジェクト一覧](docs/supported_objects.md)
-- [サンプルパッチギャラリー](docs/example_patches.md)
-- [API仕様](docs/api_specs.md)
 
 ## ライセンス
 
