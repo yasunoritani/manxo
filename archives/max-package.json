@@ -1,8 +1,8 @@
 {
-  "name": "max9-claude-mcp",
+  "name": "max8-claude-mcp",
   "version": "0.1.0",
   "author": "",
-  "description": "Max 9とClaude Desktop MCP連携パッケージ",
+  "description": "Max 8とClaude Desktop MCP連携パッケージ",
   "homepatcher": "mcp_osc_bridge.maxpat",
   "max_version_min": "8.0",
   "max_version_max": "none",

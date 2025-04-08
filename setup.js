@@ -34,9 +34,9 @@ const projectRoot = path.resolve(__dirname);
 /**
  * 必要なディレクトリ構造をセットアップ
  */
-function setupDirectoryStructure() {
+function setupDirectoryStructure () {
   console.log(`${colors.cyan}[セットアップ] ディレクトリ構造を確認しています...${colors.reset}`);
-  
+
   const directories = [
     'src/max-osc-bridge',
     'src/mcp-server',
@@ -48,7 +48,7 @@ function setupDirectoryStructure() {
     'tests/e2e',
     'examples'
   ];
-  
+
   directories.forEach(dir => {
     const dirPath = path.join(projectRoot, dir);
     if (!fs.existsSync(dirPath)) {
@@ -56,21 +56,21 @@ function setupDirectoryStructure() {
       fs.mkdirSync(dirPath, { recursive: true });
     }
   });
-  
+
   console.log(`${colors.green}[セットアップ] ディレクトリ構造の確認が完了しました${colors.reset}`);
 }
 
 /**
  * Node.js依存関係をセットアップ
  */
-function setupNodeDependencies() {
+function setupNodeDependencies () {
   console.log(`${colors.cyan}[セットアップ] Node.js依存関係をセットアップしています...${colors.reset}`);
-  
+
   // package.jsonが存在するか確認
   const packageJsonPath = path.join(projectRoot, 'package.json');
   if (!fs.existsSync(packageJsonPath)) {
     console.log(`  - package.jsonが見つかりません。新規作成します...`);
-    
+
     const packageJson = {
       "name": "max9-claude-mcp-integration",
       "version": "0.1.0",
@@ -109,13 +109,13 @@ function setupNodeDependencies() {
       "author": "",
       "license": "MIT"
     };
-    
+
     fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2));
     console.log(`  - package.jsonを作成しました`);
   } else {
     console.log(`  - 既存のpackage.jsonを使用します`);
   }
-  
+
   // 必要な依存関係をインストール
   try {
     console.log(`  - 依存関係をインストールしています...`);
@@ -129,15 +129,15 @@ function setupNodeDependencies() {
 /**
  * サンプル環境変数ファイルをセットアップ
  */
-function setupEnvironmentVariables() {
+function setupEnvironmentVariables () {
   console.log(`${colors.cyan}[セットアップ] 環境変数ファイルをセットアップしています...${colors.reset}`);
-  
+
   const envExamplePath = path.join(projectRoot, '.env.example');
   const envPath = path.join(projectRoot, '.env');
-  
+
   if (!fs.existsSync(envExamplePath)) {
     console.log(`  - .env.exampleが見つかりません。作成します...`);
-    
+
     const envExample = `# Max 9 - Claude Desktop MCP連携プロジェクト環境変数
 
 # MCP接続設定
@@ -157,13 +157,13 @@ LOG_FILE=mcp-server.log
 # 開発設定
 NODE_ENV=development  # development, production, test
 `;
-    
+
     fs.writeFileSync(envExamplePath, envExample);
     console.log(`  - .env.exampleを作成しました`);
   } else {
     console.log(`  - 既存の.env.exampleを使用します`);
   }
-  
+
   // .envファイルがなければ.env.exampleからコピー
   if (!fs.existsSync(envPath)) {
     console.log(`  - .envファイルが見つかりません。.env.exampleからコピーします...`);
@@ -172,21 +172,21 @@ NODE_ENV=development  # development, production, test
   } else {
     console.log(`  - 既存の.envファイルを使用します`);
   }
-  
+
   console.log(`${colors.green}[セットアップ] 環境変数ファイルのセットアップが完了しました${colors.reset}`);
 }
 
 /**
  * テスト環境をセットアップ
  */
-function setupTestEnvironment() {
+function setupTestEnvironment () {
   console.log(`${colors.cyan}[セットアップ] テスト環境をセットアップしています...${colors.reset}`);
-  
+
   // Jestの設定ファイルを作成
   const jestConfigPath = path.join(projectRoot, 'jest.config.js');
   if (!fs.existsSync(jestConfigPath)) {
     console.log(`  - jest.config.jsが見つかりません。作成します...`);
-    
+
     const jestConfig = `// Jest configuration
 module.exports = {
   testEnvironment: 'node',
@@ -206,18 +206,18 @@ module.exports = {
   setupFilesAfterEnv: ['./tests/setup.js']
 };
 `;
-    
+
     fs.writeFileSync(jestConfigPath, jestConfig);
     console.log(`  - jest.config.jsを作成しました`);
   } else {
     console.log(`  - 既存のjest.config.jsを使用します`);
   }
-  
+
   // テストセットアップファイルを作成
   const testSetupPath = path.join(projectRoot, 'tests', 'setup.js');
   if (!fs.existsSync(testSetupPath)) {
     console.log(`  - tests/setup.jsが見つかりません。作成します...`);
-    
+
     const testSetup = `// テスト環境のグローバルセットアップ
 require('dotenv').config();
 
@@ -236,57 +236,57 @@ afterAll(() => {
   console.log('テスト環境をクリーンアップしています...');
 });
 `;
-    
+
     fs.mkdirSync(path.dirname(testSetupPath), { recursive: true });
     fs.writeFileSync(testSetupPath, testSetup);
     console.log(`  - tests/setup.jsを作成しました`);
   } else {
     console.log(`  - 既存のtests/setup.jsを使用します`);
   }
-  
+
   // サンプルテストファイルを作成
   const sampleTestPath = path.join(projectRoot, 'tests', 'unit', 'sample.test.js');
   if (!fs.existsSync(sampleTestPath)) {
     console.log(`  - サンプルテストファイルが見つかりません。作成します...`);
-    
+
     const sampleTest = `// サンプル単体テスト
 describe('サンプルテスト', () => {
   test('1 + 1は2である', () => {
     expect(1 + 1).toBe(2);
   });
-  
+
   test('文字列の結合', () => {
     expect('hello' + ' ' + 'world').toBe('hello world');
   });
 });
 `;
-    
+
     fs.mkdirSync(path.dirname(sampleTestPath), { recursive: true });
     fs.writeFileSync(sampleTestPath, sampleTest);
     console.log(`  - サンプルテストファイルを作成しました`);
   } else {
     console.log(`  - 既存のサンプルテストファイルを使用します`);
   }
-  
+
   console.log(`${colors.green}[セットアップ] テスト環境のセットアップが完了しました${colors.reset}`);
 }
 
 /**
- * Max 9固有の依存関係をセットアップ
+ * Max 8固有の依存関係をセットアップ
  */
-function setupMaxDependencies() {
-  console.log(`${colors.cyan}[セットアップ] Max 9固有の依存関係をセットアップしています...${colors.reset}`);
-  
+function setupMaxDependencies () {
+  console.log(`${colors.cyan}[セットアップ] Max 8固有の依存関係をセットアップしています...${colors.reset}`);
+
   // Maxパッケージ構成ファイルを作成
   const maxPackagePath = path.join(projectRoot, 'max-package.json');
   if (!fs.existsSync(maxPackagePath)) {
     console.log(`  - max-package.jsonが見つかりません。作成します...`);
-    
+
     const maxPackage = {
-      "name": "max9-claude-mcp",
+      "name": "max8-claude-mcp",
       "version": "0.1.0",
       "author": "",
-      "description": "Max 9とClaude Desktop MCP連携パッケージ",
+      "description": "Max 8とClaude Desktop MCP連携パッケージ",
       "homepatcher": "mcp_osc_bridge.maxpat",
       "max_version_min": "8.0",
       "max_version_max": "none",
@@ -317,18 +317,18 @@ function setupMaxDependencies() {
         "ai"
       ]
     };
-    
+
     fs.writeFileSync(maxPackagePath, JSON.stringify(maxPackage, null, 2));
     console.log(`  - max-package.jsonを作成しました`);
   } else {
     console.log(`  - 既存のmax-package.jsonを使用します`);
   }
-  
+
   // 基本的なMaxパッチを作成
   const maxPatchPath = path.join(projectRoot, 'src', 'max-osc-bridge', 'mcp_osc_bridge.maxpat');
   if (!fs.existsSync(maxPatchPath)) {
     console.log(`  - 基本的なMaxパッチが見つかりません。作成します...`);
-    
+
     // 非常に基本的なMaxパッチのテンプレート
     const basicMaxPatch = {
       "patcher": {
@@ -396,7 +396,7 @@ function setupMaxDependencies() {
               ],
               "id": "mcp_bridge",
               "jsarguments": [
-                
+
               ],
               "embed": 1,
               "filename": "mcp_osc_bridge.js",
@@ -429,33 +429,33 @@ function setupMaxDependencies() {
         "lines": []
       }
     };
-    
+
     fs.mkdirSync(path.dirname(maxPatchPath), { recursive: true });
     fs.writeFileSync(maxPatchPath, JSON.stringify(basicMaxPatch, null, 2));
     console.log(`  - 基本的なMaxパッチを作成しました`);
   } else {
     console.log(`  - 既存のMaxパッチを使用します`);
   }
-  
-  console.log(`${colors.green}[セットアップ] Max 9固有の依存関係のセットアップが完了しました${colors.reset}`);
+
+  console.log(`${colors.green}[セットアップ] Max 8固有の依存関係のセットアップが完了しました${colors.reset}`);
 }
 
 /**
  * VSCode設定をセットアップ
  */
-function setupVSCodeConfig() {
+function setupVSCodeConfig () {
   console.log(`${colors.cyan}[セットアップ] VSCode設定をセットアップしています...${colors.reset}`);
-  
+
   const vscodeDir = path.join(projectRoot, '.vscode');
   if (!fs.existsSync(vscodeDir)) {
     fs.mkdirSync(vscodeDir, { recursive: true });
   }
-  
+
   // settings.json
   const settingsPath = path.join(vscodeDir, 'settings.json');
   if (!fs.existsSync(settingsPath)) {
     console.log(`  - VSCode settings.jsonが見つかりません。作成します...`);
-    
+
     const settings = {
       "editor.formatOnSave": true,
       "editor.codeActionsOnSave": {
@@ -474,18 +474,18 @@ function setupVSCodeConfig() {
         "**/coverage": true
       }
     };
-    
+
     fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
     console.log(`  - VSCode settings.jsonを作成しました`);
   } else {
     console.log(`  - 既存のVSCode settings.jsonを使用します`);
   }
-  
+
   // launch.json
   const launchPath = path.join(vscodeDir, 'launch.json');
   if (!fs.existsSync(launchPath)) {
     console.log(`  - VSCode launch.jsonが見つかりません。作成します...`);
-    
+
     const launch = {
       "version": "0.2.0",
       "configurations": [
@@ -514,65 +514,65 @@ function setupVSCodeConfig() {
         }
       ]
     };
-    
+
     fs.writeFileSync(launchPath, JSON.stringify(launch, null, 2));
     console.log(`  - VSCode launch.jsonを作成しました`);
   } else {
     console.log(`  - 既存のVSCode launch.jsonを使用します`);
   }
-  
+
   console.log(`${colors.green}[セットアップ] VSCode設定のセットアップが完了しました${colors.reset}`);
 }
 
 /**
  * プラットフォーム固有の設定をセットアップ
  */
-function setupPlatformSpecific() {
+function setupPlatformSpecific () {
   const platform = os.platform();
   console.log(`${colors.cyan}[セットアップ] プラットフォーム固有の設定をセットアップしています (${platform})...${colors.reset}`);
-  
+
   if (platform === 'darwin') {
     // macOS固有の設定
     console.log(`  - macOS固有の設定をセットアップしています...`);
-    
+
     // Maxパッケージディレクトリへのシンボリックリンク作成のガイド
-    console.log(`  
-  ${colors.yellow}[注意] Max 9パッケージディレクトリへのリンク:${colors.reset}
-  以下のコマンドを実行して、プロジェクトをMax 9パッケージディレクトリにリンクできます:
-  
-  ${colors.bright}ln -s "${projectRoot}" "$HOME/Documents/Max 9/Packages/max9-claude-mcp"${colors.reset}
-  
-  これにより、開発中の変更がMax 9に自動的に反映されます。
+    console.log(`
+  ${colors.yellow}[注意] Max 8パッケージディレクトリへのリンク:${colors.reset}
+  以下のコマンドを実行して、プロジェクトをMax 8パッケージディレクトリにリンクできます:
+
+  ${colors.bright}ln -s "${projectRoot}" "$HOME/Documents/Max 8/Packages/max8-claude-mcp"${colors.reset}
+
+  これにより、開発中の変更がMax 8に自動的に反映されます。
     `);
-    
+
   } else if (platform === 'win32') {
     // Windows固有の設定
     console.log(`  - Windows固有の設定をセットアップしています...`);
-    
+
     // Maxパッケージディレクトリへのシンボリックリンク作成のガイド
-    console.log(`  
-  ${colors.yellow}[注意] Max 9パッケージディレクトリへのリンク:${colors.reset}
-  以下のコマンドを管理者権限で実行して、プロジェクトをMax 9パッケージディレクトリにリンクできます:
-  
-  ${colors.bright}mklink /D "%USERPROFILE%\\Documents\\Max 9\\Packages\\max9-claude-mcp" "${projectRoot}"${colors.reset}
-  
-  これにより、開発中の変更がMax 9に自動的に反映されます。
+    console.log(`
+  ${colors.yellow}[注意] Max 8パッケージディレクトリへのリンク:${colors.reset}
+  以下のコマンドを管理者権限で実行して、プロジェクトをMax 8パッケージディレクトリにリンクできます:
+
+  ${colors.bright}mklink /D "%USERPROFILE%\\Documents\\Max 8\\Packages\\max8-claude-mcp" "${projectRoot}"${colors.reset}
+
+  これにより、開発中の変更がMax 8に自動的に反映されます。
     `);
   }
-  
+
   console.log(`${colors.green}[セットアップ] プラットフォーム固有の設定のセットアップが完了しました${colors.reset}`);
 }
 
 /**
  * READMEファイルをセットアップ
  */
-function setupReadme() {
+function setupReadme () {
   console.log(`${colors.cyan}[セットアップ] READMEファイルをセットアップしています...${colors.reset}`);
-  
+
   const readmePath = path.join(projectRoot, 'README.md');
   if (!fs.existsSync(readmePath)) {
     console.log(`  - README.mdが見つかりません。作成します...`);
-    
+
     const readme = `# Max 9 - Claude Desktop MCP連携プロジェクト
 
 Max 9とClaude Desktop（AI）の連携を実現するためのプロジェクトです。MCPプロトコルを介して、自然言語によるMax 9の制御や創造的なパッチ生成を可能にします。
@@ -640,20 +640,20 @@ Max 9とClaude Desktop（AI）の連携を実現するためのプロジェク�
 
 MIT
 `;
-    
+
     fs.writeFileSync(readmePath, readme);
     console.log(`  - README.mdを作成しました`);
   } else {
     console.log(`  - 既存のREADME.mdを使用します`);
   }
-  
+
   console.log(`${colors.green}[セットアップ] READMEファイルのセットアップが完了しました${colors.reset}`);
 }
 
 /**
  * 使用方法ガイドを表示
  */
-function showUsageGuide() {
+function showUsageGuide () {
   console.log(`
 ${colors.bright}${colors.green}セットアップが完了しました！${colors.reset}
 
@@ -682,7 +682,7 @@ ${colors.yellow}注意:${colors.reset} Max 9のパッケージディレクトリ
 /**
  * すべてのセットアップ関数を順番に実行
  */
-async function runSetup() {
+async function runSetup () {
   try {
     setupDirectoryStructure();
     setupNodeDependencies();
@@ -692,7 +692,7 @@ async function runSetup() {
     setupVSCodeConfig();
     setupPlatformSpecific();
     setupReadme();
-    
+
     showUsageGuide();
   } catch (error) {
     console.error(`${colors.red}[エラー] セットアップ中にエラーが発生しました:${colors.reset}`, error);

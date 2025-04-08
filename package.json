@@ -1,33 +1,40 @@
 {
-  "name": "max9-claude-mcp",
+  "name": "max8-claude-mcp",
   "version": "0.1.0",
-  "description": "MCP server connecting Claude Desktop with Max 9",
-  "main": "src/mcp-server/index.js",
+  "description": "MCP server connecting Claude Desktop with Max knowledge base and patch generator",
+  "main": "src/index.js",
   "scripts": {
-    "start": "node src/mcp-server/index.js",
+    "start": "node src/index.js",
+    "start:sql": "node src/sql_knowledge_base/mcp-server.js",
+    "start:generator": "node src/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/yasunoritani/v8ui.git"
+    "url": "git+https://github.com/yasunoritani/manxo.git"
   },
   "keywords": [
     "max",
-    "max9",
     "mcp",
     "claude",
-    "osc",
-    "v8ui"
+    "maxpat",
+    "generator",
+    "sql"
   ],
   "author": "",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/yasunoritani/v8ui/issues"
+    "url": "https://github.com/yasunoritani/manxo/issues"
   },
-  "homepage": "https://github.com/yasunoritani/v8ui#readme",
+  "homepage": "https://github.com/yasunoritani/manxo#readme",
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.0.7",
+    "better-sqlite3": "^8.3.0",
+    "dotenv": "^16.0.1",
     "fastmcp": "^0.4.1",
-    "node-osc": "^8.0.11"
+    "sqlite-vss": "^0.1.1",
+    "@xenova/transformers": "^2.8.0",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {}
 }
