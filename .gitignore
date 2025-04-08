@@ -63,6 +63,3 @@ src/sql_knowledge_base/osc-server.js
 src/sql_knowledge_base/validate-cli.js
 src/sql_knowledge_base/validation_engine.js
 tests/unit/sql_knowledge_base/
-
-# アーカイブフォルダ
-archives/

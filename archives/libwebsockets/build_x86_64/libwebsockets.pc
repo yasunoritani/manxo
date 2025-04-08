@@ -1,0 +1,11 @@
+prefix="/Users/mymac/v8ui/libwebsockets/build_x86_64/install"
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: libwebsockets
+Description: Websockets server and client library
+Version: 4.3.2-4cda581
+
+Libs: -L${libdir} -lwebsockets
+Cflags: -I${includedir}
