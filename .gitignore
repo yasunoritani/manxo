@@ -40,6 +40,7 @@ run_update_issues.sh
 temp_scripts/
 merged_branches.txt
 pythonナレッジ.txt
+.windsurfrules
 
 # プロジェクト固有のファイル
 min-dev/min-devkit/
