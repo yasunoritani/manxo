@@ -22,6 +22,7 @@ MCPはAnthropicが開発したModel Context Protocol（モデルコンテキス�
 
 - Max環境の操作や制御を実行するための標準化されたツール群
 - Claude AIによるツール実行の理解と管理
+- **stdio Transport**（標準入出力トランスポート）を使用した通信
 - 局所的かつ安全なプロセス間通信
 - エラーハンドリングと実行制御のフレームワーク
 
@@ -48,7 +49,7 @@ v8ui/
 │   ├── max-osc-bridge/      # Max OSC連携
 │   ├── sql_knowledge_base/  # SQL知識ベース実装
 │   │   ├── max_claude_kb.db # SQLiteデータベース
-│   │   ├── server.js        # MCPサーバー
+│   │   ├── server.js        # MCPサーバー（stdio Transport使用）
 │   │   └── integration.js   # Claude Desktop連携
 │   └── security/            # セキュリティ関連コード
 ├── docs/                    # プロジェクトドキュメント
@@ -61,7 +62,16 @@ v8ui/
 └── externals/               # 外部依存ライブラリ
 ```
 
-## 5. 重要なIssue
+## 5. MCP実装詳細
+
+本プロジェクトのMCP実装では、以下の特徴があります：
+
+- **stdio Transport**: 標準入出力を使用したプロセス間通信
+- **JSON形式**: ツール定義・呼び出し・結果の受け渡しにJSON形式を使用
+- **ローカル実行**: すべての処理はローカル環境で完結
+- **非同期処理**: ノンブロッキングな処理で高パフォーマンスを実現
+
+## 6. 重要なIssue
 
 現在のプロジェクトでは、以下のIssueに取り組んでいます：
 
@@ -69,7 +79,7 @@ v8ui/
   - GitHub上の実際のIssue番号: **#149**
   - パス: `/docs/issues/issue_010_sql_knowledge_base.md`
 
-## 6. ドキュメント
+## 7. ドキュメント
 
 主要なドキュメントは以下にあります：
 
@@ -77,7 +87,7 @@ v8ui/
 - SQL知識ベース仕様: `/docs/handover_sql_knowledge_base.md`
 - 実装Issue: `/docs/issues/` ディレクトリ
 
-## 7. ライセンス情報
+## 8. ライセンス情報
 
 ### Min-DevKitライセンス
 
