@@ -21,26 +21,53 @@
 
 ## 使い方
 
-1. **MCPサーバーをインストール・設定**
+### 1. MCPサーバーの設定
+
+1. **リポジトリのクローン**
    ```bash
+   git clone https://github.com/yourusername/v8ui.git
    cd v8ui
    npm install
    ```
 
-2. **Claude Desktopでツールを設定**
-   - Claude Desktopの設定でMCPツールを追加
-   - MCPツールの設定で以下のコマンドを指定:
-     ```
-     node src/sql_knowledge_base/mcp-server.js
-     ```
-   - Claude Desktopに指定したツールが表示されていることを確認
+2. **MCPサーバーの設定ファイルを作成**
+   Claude Desktopの設定ファイルにMCPサーバーを追加します：
 
-3. **Claude Desktopでツールを使用**
-   - 新しい会話を開始し、Max/MSPについて質問や指示を入力
+   Macの場合:
+   ```bash
+   # 設定ディレクトリがない場合は作成
+   mkdir -p ~/Library/Application\ Support/Claude/
+
+   # 設定ファイルを編集
+   nano ~/Library/Application\ Support/Claude/claude_desktop_config.json
+   ```
+
+   以下の内容を追加:
+   ```json
+   {
+     "mcp": {
+       "servers": [
+         {
+           "name": "Max Knowledge Base",
+           "command": "node /path/to/v8ui/src/sql_knowledge_base/mcp-server.js"
+         }
+       ]
+     }
+   }
+   ```
+
+### 2. Claude Desktopでの使用
+
+1. **Claude Desktopを起動（または再起動）**
+   - 設定を反映させるためにClaude Desktopを再起動します
+
+2. **MCPツールの確認**
+   - メッセージの入力欄の上部でMCPツールが表示されていることを確認します
+   - 「Max Knowledge Base」が利用可能なMCPツールとして表示されます
+
+3. **Max/MSPに関する質問や指示を入力**
    - 例：「サイン波オシレーターを作成して、ローパスフィルターにつないで」
-   - Claude Desktopが内部的にMCPツールを呼び出し、SQL知識ベースを参照
-
-4. **結果のMaxパッチを確認・必要に応じて調整**
+   - Claude Desktopが自動的にSQLデータベースを参照して適切な回答を生成します
 
 ## 主な機能
 
@@ -49,14 +76,19 @@
 - **自動検証**: SQL知識ベースを用いた最適なオブジェクト選択と接続検証
 - **修正提案**: 生成したパッチの問題点を検出し改善案を提示
 
+## MCPプロトコルについて
+
+**Model Context Protocol (MCP)** はAnthropicが開発したオープンスタンダードで、AIモデルと外部データソースやツールを安全に接続するためのプロトコルです。USB-Cが様々な周辺機器を標準化された方法で接続するように、MCPはAIと外部システムの接続を標準化します。
+
+本プロジェクトでは、MCPを通じてClaude DesktopとSQL知識ベースを連携させ、Max/MSPプログラミングに関する専門知識をLLMに提供しています。
+
 ## システムの仕組み
 
-1. **ユーザーの指示** → Claude Desktopが理解
-2. **MCPツール呼び出し** → クエリをSQL知識ベースに送信
-3. **知識ベース検索** → 適切なAPI・接続パターンを特定
-4. **Min-DevKit API選択** → 最適なMax/MSP操作を決定
-5. **実行・検証** → パッチの生成と検証
-6. **結果表示** → ユーザーに結果を返却
+1. **ユーザー** → Claude Desktopで質問や指示を入力
+2. **Claude** → 自動的にMCPを通じてSQL知識ベースに問い合わせ
+3. **知識ベース** → Max/MSPとMin-DevKitの情報を提供
+4. **Claude** → 情報を活用してパッチ生成
+5. **結果** → ユーザーにMaxパッチを提案
 
 ## ドキュメント
 
