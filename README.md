@@ -21,17 +21,21 @@
 
 ## 使い方
 
-1. Claude Desktopを起動
-2. プロジェクトディレクトリで `npm start` を実行
-3. Claude Desktopに自然言語で指示
-4. 結果のMaxパッチを確認・必要に応じて調整
+1. **プロジェクトのMCPサーバーを起動**
+   ```bash
+   cd v8ui
+   npm install
+   npm start
+   ```
 
-```bash
-# 起動コマンド
-cd v8ui
-npm install
-npm start
-```
+2. **Claude Desktopを起動し、MCPサーバーに接続**
+   - Claude Desktopで新しい会話を開始
+   - MCPツールを選択して接続
+
+3. **自然言語で指示を入力**
+   - 例：「サイン波オシレーターを作成して、ローパスフィルターにつないで」
+
+4. **結果のMaxパッチを確認・必要に応じて調整**
 
 ## 主な機能
 
