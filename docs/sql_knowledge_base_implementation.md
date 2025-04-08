@@ -1,269 +1,199 @@
-# SQL知識ベースと修正提案機能の実装詳細
+# LLM-SQL-MinDevKit 連携システム実装詳細
 
-## 1. 概要
+## 1. システム概要
 
-このドキュメントでは、Max/MSP SQL知識ベース検証エンジンの現在の実装状態と、特に修正提案機能の仕組みについて詳細に説明します。
+このシステムは、以下の3つの主要コンポーネントの連携により、C++の詳細な知識がなくてもMaxプロジェクトを開発できる環境を実現します：
 
-## 2. SQL知識ベースの構造
+1. **大規模言語モデル (LLM)**: Claude Desktop
+2. **SQL知識ベース**: MinDevKitとMax/MSPの情報リポジトリ
+3. **MinDevKit**: C++ベースのMax/MSP開発キット
 
-### 2.1 データベース概要
+![システム概念図](../assets/system_concept.png)
 
-SQLite3データベース (`max_objects.db`) は以下のテーブルで構成されています：
+### 1.1 システムの主要目的
 
-| テーブル名 | レコード数 | 内容 |
+* **知識の橋渡し**: C++やMinDevKitの詳細な知識がなくても開発可能に
+* **適切なAPI選択**: SQL知識ベースを参照してLLMが適切なMinDevKit APIを選択
+* **検証と修正**: コード、接続、パッチの妥当性検証と修正提案
+* **効率的な開発**: 繰り返し作業の自動化と知識の活用
+
+## 2. SQL知識ベースの役割と構造
+
+### 2.1 知識ベースの役割
+
+SQLデータベースは**LLMの意思決定を支援する知識源**として機能し、以下を可能にします：
+
+* MinDevKit APIの適切な選択と使用方法の提示
+* オブジェクト間の有効な接続パターンの識別
+* 一般的なエラーパターンと修正方法の提供
+* 自然言語の意図からAPIへの変換支援
+
+### 2.2 データベース構造
+
+SQLite3データベース (`max_objects.db`) には以下の情報が構造化されています：
+
+| テーブル名 | レコード数 | 内容と役割 |
 |------------|----------|------|
-| max_objects | 561 | Max/MSPオブジェクト情報（名前、タイプ、インレット数、アウトレット数、説明） |
-| min_devkit_api | 169 | Min-DevKit API関数情報 |
-| connection_patterns | 201 | 接続パターン情報 |
-| validation_rules | 105 | 検証ルール情報 |
-| api_mapping | 160 | 自然言語意図からAPI関数へのマッピング |
+| min_devkit_api | 169 | **MinDevKit API関数情報**<br>・関数名、パラメータ、返り値<br>・使用例とコンテキスト<br>・一般的なエラーパターン |
+| max_objects | 561 | **Max/MSPオブジェクト情報**<br>・名前、タイプ、インレット/アウトレット情報<br>・シグナルタイプと互換性<br>・使用上の注意点 |
+| connection_patterns | 201 | **接続パターン情報**<br>・有効な接続組み合わせ<br>・最適な接続順序<br>・パフォーマンス情報 |
+| validation_rules | 105 | **検証ルール情報**<br>・コード品質基準<br>・パターンマッチングルール<br>・セキュリティガイドライン |
+| api_mapping | 160 | **自然言語からAPI変換**<br>・意図とAPIの対応関係<br>・コンテキスト固有の用語マッピング |
 
-### 2.2 主要テーブルのスキーマ
+### 2.3 知識ベースへのアクセス例
 
-```sql
--- max_objectsテーブル
-CREATE TABLE max_objects (
-  id INTEGER PRIMARY KEY,
-  name TEXT NOT NULL,
-  type TEXT,
-  inlets TEXT,  -- JSON形式の配列として格納
-  outlets TEXT, -- JSON形式の配列として格納
-  description TEXT
-);
-
--- connection_compatibilityテーブル
-CREATE TABLE connection_compatibility (
-  id INTEGER PRIMARY KEY,
-  source_type TEXT NOT NULL,
-  target_type TEXT NOT NULL,
-  compatibility_level INTEGER,
-  notes TEXT
+```javascript
+// MinDevKit API情報の取得例
+db.all(
+  'SELECT name, parameters, return_type, usage_example FROM min_devkit_api WHERE context = ?',
+  ['audio_processing'],
+  (err, rows) => {
+    // LLMに情報提供するためのフォーマット処理
+  }
 );
 ```
 
-## 3. 検証エンジンの実装
+## 3. LLMとSQL知識ベースの連携
 
-### 3.1 ValidationEngine クラス
+### 3.1 連携フロー
 
-`ValidationEngine`クラスはJavaScript/Min-DevKitコードの検証を担当します。主な機能：
+1. **ユーザーの意図理解**: LLMがユーザーの自然言語指示を理解
+2. **知識ベース検索**: 意図に基づき適切なSQL検索を実行
+3. **コンテキスト活用**: 検索結果をLLMのプロンプトコンテキストに追加
+4. **コード生成・検証**: MinDevKit APIを活用したコード生成と検証
+5. **フィードバック**: 結果をユーザーに提示し、必要に応じて反復
 
-- データベース接続の管理
-- オブジェクト情報のキャッシング
-- 互換性ルールの読み込み
+### 3.2 MCPプロトコルを活用した実装
 
-```javascript
-class ValidationEngine {
-    constructor () {
-        this.db = null;
-        this.objectCache = new Map();
-        this.compatibility = new Map();
-        this.initialized = false;
-        this.initPromise = this.initialize();
-    }
-
-    // ...その他のメソッド
-}
-```
-
-### 3.2 コード検証機能
-
-現在の実装では、**主にJavaScriptコードの検証**に焦点が当てられています：
+MCP（Model Context Protocol）を用いて、LLMとSQL知識ベース間の連携を実現：
 
 ```javascript
-validateCode (code, context = 'js') {
-    const result = {
-        valid: true,
-        syntaxErrors: [],
-        logicWarnings: [],
-        suggestions: []
-    };
-
-    // 構文検証 - acornパーサーを使用
-    try {
-        const ast = acorn.parse(code, {
-            ecmaVersion: 2020,
-            locations: true,
-            sourceType: 'script'
-        });
-
-        // 論理チェック（簡易版）
-        this.performLogicChecks(ast, code, result);
-    } catch (error) {
-        // エラー処理
-    }
-
-    // コンテキスト固有の検証
-    if (context === 'jsui') {
-        this.validateJsuiCode(code, result);
-    } else if (context === 'js') {
-        this.validateJsCode(code, result);
-    }
-
-    return result;
-}
-```
-
-**重要な注意点**: 現在の実装では、C++(Min-DevKit)の構文解析や検証に特化したコードは含まれていません。`min_object`コンテキストの処理も実装されていません。
-
-### 3.3 接続検証機能
-
-オブジェクト間の接続検証は、データベースからの互換性情報を使用して実装されています：
-
-```javascript
-async validateConnection (sourceObj, sourceOutlet, destObj, destInlet) {
-    await this.ensureInitialized();
-
-    // データベースからオブジェクト情報を取得
-    const sourceInfo = this.objectCache.get(sourceObj);
-    const destInfo = this.objectCache.get(destObj);
-
-    // 互換性チェック
-    // ...
-}
-```
-
-## 4. 修正提案機能の実装
-
-### 4.1 MCP経由のツール登録
-
-ClaudeAI統合モジュールは、以下のようにMCPツールとして修正提案機能を登録しています：
-
-```javascript
+// ツール登録例
 this.mcpServer.registerTool({
-  name: 'suggestFixes',
-  description: 'Suggest fixes for code issues',
+  name: 'queryMinDevKitAPI',
+  description: '指定した機能やコンテキストに関連するMinDevKit API情報を取得',
   inputJsonSchema: {
     type: 'object',
-    required: ['code', 'issues'],
+    required: ['functionality'],
     properties: {
-      code: {
+      functionality: {
         type: 'string',
-        description: 'Code with issues'
+        description: '実現したい機能（例: "オーディオ処理", "UIコントロール"）'
       },
-      issues: {
-        type: 'array',
-        description: 'List of issues found during validation',
-        items: {
-          type: 'object'
-        }
+      context: {
+        type: 'string',
+        description: '使用コンテキスト（例: "max_object", "audio_processing"）'
       }
     }
   },
-  execute: async ({ code, issues }) => {
-    // 実行ロジック
-    const fix = await this.getFixSuggestion(code, issues);
-    return { content: JSON.stringify(fix, null, 2) };
+  execute: async ({ functionality, context }) => {
+    // SQL知識ベースから関連APIを検索
+    const apis = await this.getRelevantAPIs(functionality, context);
+    return { content: JSON.stringify(apis, null, 2) };
   }
 });
 ```
 
-### 4.2 修正提案の生成プロセス
+## 4. MinDevKit連携の実装
 
-修正提案は`getFixSuggestion`メソッドで以下のように生成されます：
+### 4.1 API選択と適用
+
+LLMは以下の手順でMinDevKit APIを選択・適用します：
+
+1. **ユーザー要件の分析**: 実現したい機能を理解
+2. **SQL知識ベース検索**: 適切なAPI候補を特定
+3. **最適化**: コンテキストに最適なAPI選択
+4. **コード生成**: MinDevKit APIを使用したC++コード生成
+5. **検証**: 生成コードの整合性チェック
+
+### 4.2 実装例
 
 ```javascript
-async getFixSuggestion (code, issues) {
-  await this._ensureInitialized();
+async function suggestMinDevKitImplementation(requirement) {
+  // 1. 要件からキーワード抽出
+  const keywords = extractKeywords(requirement);
 
-  // 問題がない場合は空の提案
-  if (!issues || issues.length === 0) {
-    return { has_proposals: false, proposals: [] };
-  }
+  // 2. 関連するAPIを検索
+  const apis = await db.all(
+    'SELECT * FROM min_devkit_api WHERE context LIKE ? OR keywords LIKE ?',
+    [`%${keywords[0]}%`, `%${keywords[1]}%`]
+  );
 
-  try {
-    // 基本的な修正提案を生成
-    let basicProposals = { has_proposals: false, proposals: [] };
+  // 3. LLMにコンテキスト提供してコード生成
+  const prompt = createPromptWithAPIs(requirement, apis);
+  const generatedCode = await generateCodeWithLLM(prompt);
 
-    if (this.validationEngine.generateFixProposals) {
-      try {
-        basicProposals = this.validationEngine.generateFixProposals(code, issues);
-      } catch (error) {
-        // エラー処理
-      }
-    }
+  // 4. 生成コードの検証
+  const validationResult = validateMinDevKitCode(generatedCode);
 
-    // テンプレートを使った修正提案用のプロンプトを準備
-    const promptData = {
-      code: code,
-      issues: issues.map(issue =>
-        `- ${issue.severity || 'issue'}: ${issue.description || issue.message || JSON.stringify(issue)}`
-      ).join('\n')
-    };
-
-    // プロンプトテンプレートを埋める
-    const prompt = this.fillTemplate('code_fix', promptData);
-
-    // 結果を返す
-    return {
-      has_proposals: basicProposals.has_proposals,
-      proposals: basicProposals.proposals || [],
-      prompt_template: prompt.substring(0, 200) + '...' // プロンプトの一部を返す
-    };
-  } catch (error) {
-    console.error('修正提案生成エラー:', error);
-    throw new Error(`修正提案の生成に失敗しました: ${error.message}`);
-  }
+  return {
+    code: generatedCode,
+    used_apis: apis.map(a => a.name),
+    validation: validationResult
+  };
 }
 ```
 
-### 4.3 テンプレートシステム
+## 5. 修正提案機能の実装
 
-修正提案は事前に定義されたテンプレートを使用しています：
+### 5.1 LLMベースの修正提案プロセス
+
+修正提案は以下のプロセスで生成されます：
+
+1. **問題検出**: コードパターン分析と知識ベース参照による問題検出
+2. **コンテキスト構築**: 問題、コード、関連APIのコンテキスト作成
+3. **LLM活用**: コンテキストに基づく修正案の生成
+4. **修正適用**: 修正内容の適用と再検証
+
+### 5.2 実装コード
 
 ```javascript
-const DEFAULT_TEMPLATES = {
-  'code_fix.txt': `あなたはMax/MSPプログラミングの専門家です。以下のJavaScriptコードに問題があります。コードを詳しく分析し、問題を修正した完全なコードを提供してください。
+async function getFixProposal(code, issues) {
+  // 1. 関連するAPIと修正パターンの検索
+  const relevantAPIs = await findRelevantAPIs(code);
+  const fixPatterns = await findFixPatterns(issues);
 
-問題のコード:
-{{code}}
+  // 2. LLMへのプロンプト作成
+  const promptData = {
+    code: code,
+    issues: issues.map(issue => formatIssue(issue)).join('\n'),
+    relevant_apis: formatAPIs(relevantAPIs),
+    fix_patterns: formatFixPatterns(fixPatterns)
+  };
 
-検出された問題:
-{{issues}}
+  // 3. テンプレートにデータを適用
+  const prompt = fillTemplate('code_fix', promptData);
 
-修正したコード全体を提供してください。変更箇所には簡潔なコメントを入れてください。`,
-
-  'connection_fix.txt': `あなたはMax/MSPプログラミングの専門家です。以下のオブジェクト接続に問題があります。この接続を最適化する方法を提案してください。
-
-  // ...
-  `,
-
-  'patch_fix.txt': `あなたはMax/MSPプログラミングの専門家です。以下のパッチに問題があります。パッチの改善方法を提案してください。
-
-  // ...
-  `
-};
+  // 4. LLMによる修正提案生成
+  return {
+    has_proposals: true,
+    proposals: await generateProposalsWithLLM(prompt),
+    context: {
+      apis_referenced: relevantAPIs.map(api => api.name),
+      patterns_applied: fixPatterns.map(pattern => pattern.id)
+    }
+  };
+}
 ```
 
-## 5. 現在の実装の制限と課題
+## 6. システムの強みと制限
 
-### 5.1 C++コード検証の制限
+### 6.1 強み
 
-現在の実装には以下の制限があります：
+1. **知識の集約と再利用**: SQL知識ベースによりMinDevKitとMax/MSPの専門知識を集約
+2. **LLMの文脈理解活用**: 自然言語からAPIへの変換を効率化
+3. **繰り返し作業の自動化**: 一般的なパターンの自動適用
+4. **C++の知識なしで開発可能**: 直接MinDevKit APIを活用
 
-1. **C++構文解析の欠如**: JavaScriptの構文解析（acorn）はあるが、C++コードパーサーがない
-2. **Min-DevKit固有のチェック不足**: データベースにAPIリストはあるが、それを使ったコード検証ロジックがない
-3. **単純なパターンマッチング**: 高度なコード理解ではなく、単純なパターンマッチングに依存
+### 6.2 現在の制限と課題
 
-### 5.2 修正提案機能の限界
+1. **完全なC++構文解析の欠如**: パターンマッチベースの検証に限定
+2. **限定的なAPI適用範囲**: 特定のパターンに対応したAPI選択のみ
+3. **変更検出の限界**: コード変更の影響範囲の分析能力の制限
 
-1. **基本的な提案のみ**: ValidationEngineの`generateFixProposals`の実装詳細が不明確
-2. **テンプレートベース**: 固定テンプレートを使用したプロンプト生成に依存
-3. **JavaScriptに特化**: C++コードの修正提案に特化したテンプレートが不十分
+## 7. 今後の発展方向
 
-### 5.3 データベースと検証ロジックの乖離
-
-1. **情報と機能の分離**: データベースに詳細な情報があるにもかかわらず、それを活用する検証ロジックが不足
-2. **特にMin-DevKit API**: 169のAPI関数情報があるが、それらの正しい使用を検証するロジックがない
-
-## 6. 今後の改善方向
-
-### 6.1 短期的な改善
-
-1. **パターンベースのC++チェック**: 最も一般的なMin-DevKit APIパターンの簡易チェック実装
-2. **C++固有の修正提案テンプレート**: より具体的なC++関連の問題に対応したテンプレート追加
-
-### 6.2 中長期的な改善
-
-1. **C++パーサーの導入**: Clang/LibToolベースのC++コード解析機能の追加
-2. **Min-DevKit APIの詳細検証**: データベース情報を活用したAPI使用の詳細検証
-3. **コンテキスト認識型修正提案**: 問題のタイプと原因に基づく適応的な修正提案
+1. **API利用パターンの拡充**: より多様なユースケースへの対応
+2. **SQL知識ベースの継続的更新**: 新APIや最適パターンの追加
+3. **ユーザーフィードバックの取り込み**: 実際の利用パターンを基にした改善
+4. **コンテキスト認識の向上**: より細粒度なコンテキスト解析と適用
