@@ -1,43 +1,49 @@
-# Max-Claude連携プロジェクト
+# Max-Claude パッチジェネレーター
 
 ## プロジェクト概要
 
-本プロジェクトは、Claude DesktopのAI機能とMax/MSPのサウンドプログラミング環境を連携させるシステムです。ユーザーは自然言語でMax/MSPの操作や音楽生成の指示を出すことができます。
+本プロジェクトは、自然言語の指示から直接Max/MSPパッチファイル(`.maxpat`)やMax for Liveデバイス(`.amxd`)を生成するAIシステムです。ユーザーは音楽制作やサウンドデザインのアイデアを自然言語で表現するだけで、すぐに使えるMaxパッチを入手できます。
+
+## 主な機能
+
+- **自然言語→Maxパッチ変換**: 日常言語での説明から完全なMaxパッチを生成
+- **Max for Live対応**: Ableton Live用のデバイス(`.amxd`)ファイル生成
+- **AIによるパッチ設計**: 音楽理論やDSP知識に基づいた最適なパッチ構造の提案
+- **即時利用可能**: 生成されたパッチファイルはすぐにMaxまたはAbleton Liveで開いて使用可能
 
 ## システム構成
 
-システムは以下の3つの主要コンポーネントで構成されています：
+システムは以下の主要コンポーネントで構成されています：
 
-1. **MCPサーバー（Node.js）**：
-   - Claude DesktopとのMCP（Model Context Protocol）通信を担当
-   - JSON形式でのデータやり取り
-   - SQL知識ベースへのクエリと結果処理
+1. **MCPサーバー**:
+   - Claude DesktopとのMCP通信
+   - 自然言語からMaxパッチ構造への変換処理
+   - JSONパッチファイル生成エンジン
 
-2. **SQL知識ベース**：
-   - Max/MSPのオブジェクト情報
-   - 接続パターンのバリデーション
-   - 修正提案の生成
+2. **SQL知識ベース**:
+   - Max/MSPオブジェクト情報（パラメータ、接続ポイントなど）
+   - 一般的な接続パターンやテンプレート
+   - オブジェクト間の互換性情報
 
-3. **Min-DevKit（C++）**：
-   - Max/MSPへの直接アクセス
-   - MCPサーバーからの命令をMax/MSP操作に変換
-   - C++ベースの高速処理
+3. **Max/MSP構造モデル**:
+   - `.maxpat`と`.amxd`のJSON構造テンプレート
+   - 一般的なパッチパターンのライブラリ
+   - Min-DevKit APIの知識を活用したオブジェクト挙動モデル
 
 ## セットアップ方法
 
 ### 前提条件
 
-- Max/MSP 8以降
 - Node.js 14以降
-- C++開発環境（Min-DevKit用）
 - Claude Desktop
+- Max/MSP 8以降（生成されたパッチを開くため）
 
 ### インストール手順
 
 1. **リポジトリのクローン**
    ```bash
-   git clone https://github.com/yourusername/max-claude-integration.git
-   cd max-claude-integration
+   git clone https://github.com/yourusername/max-claude-patchgen.git
+   cd max-claude-patchgen
    npm install
    ```
 
@@ -56,19 +62,17 @@
      "mcp": {
        "servers": [
          {
-           "name": "Max Knowledge Base",
-           "command": "node /path/to/max-claude-integration/src/sql_knowledge_base/mcp-server.js"
+           "name": "Max Patch Generator",
+           "command": "node /path/to/max-claude-patchgen/src/mcp-server.js"
          }
        ]
      }
    }
    ```
 
-3. **Min-DevKitのビルド（開発者向け）**
+3. **SQLデータベースの初期化**
    ```bash
-   cd src/min-devkit
-   cmake .
-   make
+   node src/db/init-database.js
    ```
 
 ## 使い方
@@ -78,47 +82,52 @@
 
 2. **MCPツールの確認**
    - Claude Desktopの入力欄上部でMCPツールが表示されていることを確認
-   - 「Max Knowledge Base」が利用可能なMCPツールとして表示されます
+   - 「Max Patch Generator」が利用可能なMCPツールとして表示されます
 
-3. **Max/MSPに関する質問や指示を入力**
-   - 例：「サイン波オシレーターを作成して、ローパスフィルターにつないで」
-   - Claude Desktopが自動的にSQL知識ベースと連携して回答・操作を行います
+3. **Maxパッチの生成を指示**
+   - 例：「4つのサイン波オシレーターからなるアディティブシンセサイザーのパッチを作って、ピッチとボリュームをコントロールできるようにして」
+   - より詳細な指示も可能：「フィードバックディレイとリバーブを備えたグラニュラーサンプラーを作って、タイムストレッチパラメーターも付けて」
+
+4. **生成されたパッチファイルを使用**
+   - AIが指示に基づいて`.maxpat`または`.amxd`ファイルを生成
+   - 生成されたファイルはシステムのダウンロードフォルダまたは指定フォルダに保存
+   - Max/MSPまたはAbleton Liveで開いてすぐに使用可能
 
 ## 技術詳細
 
-### MCPプロトコル
+### パッチ生成プロセス
 
-Model Context Protocol (MCP) はAnthropicが開発したオープンスタンダードで、AIモデルと外部ツールを安全に接続するプロトコルです。本プロジェクトでは、MCPを使用してClaude DesktopとMax/MSP関連の知識・操作機能を連携させています。
+1. **自然言語解析**: ユーザーの指示から必要なオブジェクト、接続、パラメータを抽出
+2. **パッチ構造設計**: 音響プロセッシングの原則に基づいて最適なオブジェクト構成を決定
+3. **JSON構造生成**: Maxパッチファイル形式（JSON）に変換
+4. **ポストプロセス**: オブジェクト配置の最適化、自動レイアウト調整
 
-### Min-DevKit
+### Max/MSPパッチファイル構造
 
-Min-DevKitはCycling '74が提供する現代的なC++フレームワークで、Max/MSPの拡張開発を容易にします。本プロジェクトでは、Min-DevKitを使用してClaude Desktopからの命令をMax/MSP内部で実行可能な形式に変換し、直接操作を行います。
+Maxパッチ(`.maxpat`)とMax for Liveデバイス(`.amxd`)は基本的にJSON形式のテキストファイルです。システムはMin-DevKitの知識を活用し、有効なJSON構造を生成します。パッチファイルには以下の要素が含まれます：
 
-### データフロー
-
-1. ユーザーがClaude Desktopに自然言語で指示
-2. Claude Desktopが指示を理解し、MCPプロトコルを通じてサーバーに問い合わせ
-3. MCPサーバーがSQL知識ベースを参照して適切な操作を決定
-4. 操作命令がMin-DevKitを通じてMax/MSPに伝達
-5. Max/MSPが操作を実行し、結果をフィードバック
-6. 結果情報がClaude Desktopに返され、ユーザーに提示
+- オブジェクト定義（種類、位置、パラメータなど）
+- オブジェクト間の接続情報
+- UIエレメント（スライダー、ボタンなど）の定義
+- パッチの全体設定（サイズ、表示オプションなど）
 
 ## 開発状況
 
 現在進行中の課題:
-- SQL知識ベースの拡充
-- Min-DevKit連携の安定化
-- ユーザーインターフェースの改善
+- より複雑なパッチ構造のサポート
+- UI要素の洗練化
+- 様々な音楽ジャンル向けテンプレートの拡充
+- Max for Liveデバイスのカスタムスキン対応
 
 ## ドキュメント
 
-- [技術仕様書](docs/specifications/technical_specs.md)
-- [Min-DevKit実装詳細](docs/min-devkit_implementation.md)
-- [SQL知識ベース構造](docs/sql_database_schema.md)
+- [パッチ構造リファレンス](docs/patch_structure.md)
+- [サポートされているオブジェクト一覧](docs/supported_objects.md)
+- [サンプルパッチギャラリー](docs/example_patches.md)
+- [API仕様](docs/api_specs.md)
 
 ## ライセンス
 
 本プロジェクトはMITライセンスで提供されています。
 
-Min-DevKitはCycling '74によるMITライセンスのソフトウェアです。
-Copyright © 2016-2022, Cycling '74
+生成されたMaxパッチの著作権はユーザーに帰属します。商用利用を含め、生成されたパッチを自由にお使いいただけます。
