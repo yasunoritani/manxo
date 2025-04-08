@@ -40,3 +40,26 @@ run_update_issues.sh
 temp_scripts/
 merged_branches.txt
 pythonナレッジ.txt
+
+# プロジェクト固有のファイル
+min-dev/min-devkit/
+docs/design/cross_platform_analysis.md
+docs/fixed/
+docs/handover_document.md
+src/max-osc-bridge/INSTALL.md
+src/max-osc-bridge/max-simple-bridge.js
+src/max-osc-bridge/simple-bridge.maxpat
+src/max-osc-bridge/sql_knowledge_bridge.maxpat
+src/max-osc-bridge/use-osc-bridge.maxpat
+src/min-devkit/orchestrator/mcp.min_bridge.cpp
+src/min-devkit/osc_bridge/mcp_server.ts
+src/min-devkit/osc_bridge/osc_client.ts
+src/min-devkit/osc_bridge/package-lock.json
+src/min-devkit/osc_bridge/package.json
+src/min-devkit/osc_bridge/tsconfig.json
+src/sql_knowledge_base/config.js
+src/sql_knowledge_base/logger.js
+src/sql_knowledge_base/osc-server.js
+src/sql_knowledge_base/validate-cli.js
+src/sql_knowledge_base/validation_engine.js
+tests/unit/sql_knowledge_base/
