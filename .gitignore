@@ -31,3 +31,12 @@ npm-debug.log*
 # 以下の行は不要ですが参考として残しておきます
 # tools/secure/
 # tools/private/
+
+# ユーティリティスクリプト
+upload_issues.py
+update_issues_with_labels.py
+run_update_issues.sh
+*_backup/
+temp_scripts/
+merged_branches.txt
+pythonナレッジ.txt
