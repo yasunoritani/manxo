@@ -4,6 +4,8 @@
 
 このプロジェクトは、Claude DesktopからMax環境を操作できるようにするための連携システムです。**Min-DevKit**（C++ベース）を介してClaude DesktopとMax/MSPの橋渡しを行い、AIによるMax環境の自動操作を実現することが目的です。
 
+**シンプルな説明**: C++やMax/MSPの詳細な知識がなくても、Claude Desktopの自然言語指示だけでMaxプロジェクトを作成・編集できるようにするシステムです。
+
 ### 主要な目標
 
 - C++ベースのMin-DevKit開発環境の構築（Max 7.x/8.x互換）
@@ -36,6 +38,8 @@ MCPはAnthropicが開発したModel Context Protocol（モデルコンテキス�
 5. **api_mapping**: 自然言語意図からAPI関数へのマッピング（160レコード）
 
 この知識ベースにより、コード検証や修正提案などの高度な機能を実現します。
+
+**重要ポイント**: SQLデータベースはLLM（Claude Desktop）の意思決定を支援する「知識源」として機能します。LLMはこのデータベースを参照することで、Max/MSPやMin-DevKitの専門知識がなくても適切なAPIの選択や接続パターンの判断ができるようになります。
 
 ## 4. プロジェクト構造
 
@@ -76,7 +80,14 @@ v8ui/
 5. **実行レイヤー**: Max内部APIを活用した処理の実行
 6. **結果のフィードバック**: 実行結果と検証情報をJSONに変換してClaude Desktopに返却
 
-## 6. 重要なIssue
+## 6. システムの実際の流れ
+
+1. ユーザーがClaude Desktopに自然言語で指示（例: 「サイン波を作成してフィルターに接続して」）
+2. Claude DesktopがSQL知識ベースに問い合わせて必要なAPIと接続パターンを特定
+3. 適切なMin-DevKit APIが選択され、Maxパッチに反映
+4. 結果がユーザーに表示され、必要に応じて修正提案
+
+## 7. 重要なIssue
 
 現在のプロジェクトでは、以下のIssueに取り組んでいます：
 
@@ -84,15 +95,17 @@ v8ui/
   - GitHub上の実際のIssue番号: **#149**
   - パス: `/docs/issues/issue_010_sql_knowledge_base.md`
 
-## 7. ドキュメント
+## 8. ドキュメント
 
 主要なドキュメントは以下にあります：
 
-- 要件定義書: `/docs/specifications/requirements_min_devkit.md`
+- 要件定義書（詳細版）: `/docs/specifications/requirements_min_devkit.md`
+- 要件定義書（シンプル版）: `/docs/requirements_simplified.md`
 - SQL知識ベース仕様: `/docs/handover_sql_knowledge_base.md`
+- SQL知識ベース実装詳細: `/docs/sql_knowledge_base_implementation.md`
 - 実装Issue: `/docs/issues/` ディレクトリ
 
-## 8. ライセンス情報
+## 9. ライセンス情報
 
 ### Min-DevKitライセンス
 
