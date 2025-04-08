@@ -48,6 +48,9 @@ const DEFAULT_TEMPLATES = {
 このパッチを改善するための具体的な提案を行ってください。パフォーマンスの向上、信頼性の向上、可読性の向上のための変更点を含めてください。`
 };
 
+// シングルトンインスタンスを保持
+let claudeIntegrationInstance = null;
+
 /**
  * Claude AI統合クラス
  * MCPプロトコルを使用してClaude Desktopと連携します
@@ -59,7 +62,7 @@ class ClaudeAIIntegration {
    * @param {Object} [options.validationEngine=null] - 検証エンジンインスタンス（依存性注入用）
    * @param {Object} [options.templateDir=null] - テンプレートディレクトリパス
    */
-  constructor(options = {}) {
+  constructor (options = {}) {
     this.debug = options.debug || false;
     this.validationEngine = options.validationEngine || null;
     this.templateDir = options.templateDir || TEMPLATES_DIR;
@@ -74,7 +77,7 @@ class ClaudeAIIntegration {
    * 初期化処理
    * @returns {Promise<boolean>} 初期化成功/失敗
    */
-  async initialize() {
+  async initialize () {
     if (this.initialized) {
       return true;
     }
@@ -93,7 +96,7 @@ class ClaudeAIIntegration {
    * @private
    * @returns {Promise<boolean>} 初期化成功/失敗
    */
-  async _doInitialize() {
+  async _doInitialize () {
     try {
       if (!this.validationEngine) {
         const { getValidationEngine } = require('./validation_engine');
@@ -123,7 +126,7 @@ class ClaudeAIIntegration {
    * MCPサーバーの初期化
    * @private
    */
-  _initMcpServer() {
+  _initMcpServer () {
     try {
       this.mcpServer = new McpServer({
         id: 'max_validation_engine',
@@ -154,7 +157,7 @@ class ClaudeAIIntegration {
    * MCP ツールの登録
    * @private
    */
-  _registerTools() {
+  _registerTools () {
     try {
       // コード検証ツール
       this.mcpServer.registerTool({
@@ -371,7 +374,7 @@ class ClaudeAIIntegration {
    * @private
    * @returns {Promise<void>}
    */
-  async _startMcpServer() {
+  async _startMcpServer () {
     if (this.mcpServerStarted) {
       return;
     }
@@ -395,7 +398,7 @@ class ClaudeAIIntegration {
    * @private
    * @returns {Promise<void>}
    */
-  async _ensureInitialized() {
+  async _ensureInitialized () {
     if (!this.initialized) {
       await this.initialize();
       if (!this.initialized) {
@@ -409,7 +412,7 @@ class ClaudeAIIntegration {
    * @private
    * @returns {Promise<void>}
    */
-  async _loadTemplates() {
+  async _loadTemplates () {
     try {
       // テンプレートディレクトリの存在確認
       try {
@@ -449,7 +452,7 @@ class ClaudeAIIntegration {
    * @param {object} data - 埋め込むデータ
    * @returns {string} 完成したプロンプト
    */
-  fillTemplate(templateName, data) {
+  fillTemplate (templateName, data) {
     const template = this.templates[templateName];
     if (!template) {
       const error = new Error(`テンプレート ${templateName} が見つかりません`);
@@ -471,7 +474,7 @@ class ClaudeAIIntegration {
    * @param {Array} issues - 検出された問題
    * @returns {Promise<object>} 修正提案
    */
-  async getFixSuggestion(code, issues) {
+  async getFixSuggestion (code, issues) {
     await this._ensureInitialized();
 
     // 問題がないか、問題リストが空の場合は空の提案を返す
@@ -522,7 +525,7 @@ class ClaudeAIIntegration {
    * @param {string} contextType - コンテキストタイプ ('code', 'connection', 'patch')
    * @returns {object} AIコンテキスト
    */
-  formatValidationForAI(result, contextType) {
+  formatValidationForAI (result, contextType) {
     if (!result) {
       throw new Error('検証結果が提供されていません');
     }
@@ -545,7 +548,7 @@ class ClaudeAIIntegration {
    * @param {object} result - コード検証結果
    * @returns {object} AIコンテキスト
    */
-  _formatCodeValidationForAI(result) {
+  _formatCodeValidationForAI (result) {
     // エラーと警告を分類
     const issues = Array.isArray(result.issues) ? result.issues : [];
     const errors = issues.filter(issue => issue.severity === 'error');
@@ -582,7 +585,7 @@ class ClaudeAIIntegration {
    * @param {object} result - 接続検証結果
    * @returns {object} AIコンテキスト
    */
-  _formatConnectionValidationForAI(result) {
+  _formatConnectionValidationForAI (result) {
     return {
       validation_summary: {
         is_valid: result.valid === true,
@@ -606,7 +609,7 @@ class ClaudeAIIntegration {
    * @param {object} result - パッチ検証結果
    * @returns {object} AIコンテキスト
    */
-  _formatPatchValidationForAI(result) {
+  _formatPatchValidationForAI (result) {
     // エラーと警告を分類
     const issues = Array.isArray(result.issues) ? result.issues : [];
     const errors = issues.filter(issue => issue.severity === 'error');
@@ -633,8 +636,78 @@ class ClaudeAIIntegration {
       important_warnings: warnings.length > 0 ? warnings.slice(0, 3) : []
     };
   }
+
+  /**
+   * リソースのクリーンアップを行う
+   * 他のクラスのcleanupメソッドとの整合性を保つため実装
+   */
+  cleanup () {
+    if (this.mcpServer) {
+      try {
+        // 必要に応じてMCPサーバーの接続を閉じる処理があれば実装
+        this.mcpServerStarted = false;
+      } catch (error) {
+        console.error('MCPサーバークリーンアップエラー:', error);
+      }
+    }
+
+    // validation_engineのcleanupが必要な場合
+    if (this.validationEngine && typeof this.validationEngine.cleanup === 'function') {
+      try {
+        this.validationEngine.cleanup();
+      } catch (error) {
+        console.error('ValidationEngineクリーンアップエラー:', error);
+      }
+    }
+
+    this.initialized = false;
+    console.log('ClaudeAI統合モジュールがクリーンアップされました');
+  }
 }
 
+/**
+ * ClaudeAI統合のシングルトンインスタンスを取得
+ * 他のモジュールとの整合性を保つためのファクトリ関数
+ * @param {Object} [options={}] - 設定オプション
+ * @returns {ClaudeAIIntegration} ClaudeAI統合のインスタンス
+ */
+function getClaudeAIIntegration (options = {}) {
+  if (!claudeIntegrationInstance) {
+    claudeIntegrationInstance = new ClaudeAIIntegration(options);
+  }
+  return claudeIntegrationInstance;
+}
+
+/**
+ * ClaudeAI統合のクリーンアップ
+ * 他のモジュールとの整合性を保つためのクリーンアップ関数
+ */
+function cleanupClaudeAIIntegration () {
+  if (claudeIntegrationInstance) {
+    claudeIntegrationInstance.cleanup();
+    claudeIntegrationInstance = null;
+  }
+}
+
+// プロセス終了時の処理
+process.on('SIGINT', () => {
+  console.log('ClaudeAI統合をシャットダウンしています...');
+  cleanupClaudeAIIntegration();
+});
+
+process.on('SIGTERM', () => {
+  console.log('ClaudeAI統合をシャットダウンしています...');
+  cleanupClaudeAIIntegration();
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('ClaudeAI統合で予期しないエラーが発生しました:', err);
+  cleanupClaudeAIIntegration();
+  process.exit(1);
+});
+
 module.exports = {
-  ClaudeAIIntegration
+  ClaudeAIIntegration,
+  getClaudeAIIntegration,
+  cleanupClaudeAIIntegration
 };
