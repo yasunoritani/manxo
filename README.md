@@ -30,7 +30,7 @@ MCPはAnthropicが開発したModel Context Protocol（モデルコンテキス�
 
 本プロジェクトではSQLite3ベースの知識ベースを実装し、以下の情報を構造化しています：
 
-1. **max_objects**: Max/MSPオブジェクト情報（204レコード）
+1. **max_objects**: Max/MSPオブジェクト情報（561レコード）
 2. **min_devkit_api**: Min-DevKit API関数情報（169レコード）
 3. **connection_patterns**: 接続パターン情報（201レコード）
 4. **validation_rules**: 検証ルール情報（105レコード）
