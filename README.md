@@ -21,19 +21,24 @@
 
 ## 使い方
 
-1. **プロジェクトのMCPサーバーを起動**
+1. **MCPサーバーをインストール・設定**
    ```bash
    cd v8ui
    npm install
-   npm start
    ```
 
-2. **Claude Desktopで使用**
-   - 起動したMCPサーバーは自動的にClaude Desktopと連携
-   - Claude Desktopは自動的にMCPサーバーの機能を検出・利用可能
+2. **Claude Desktopでツールを設定**
+   - Claude Desktopの設定でMCPツールを追加
+   - MCPツールの設定で以下のコマンドを指定:
+     ```
+     node src/sql_knowledge_base/mcp-server.js
+     ```
+   - Claude Desktopに指定したツールが表示されていることを確認
 
-3. **自然言語で指示を入力**
+3. **Claude Desktopでツールを使用**
+   - 新しい会話を開始し、Max/MSPについて質問や指示を入力
    - 例：「サイン波オシレーターを作成して、ローパスフィルターにつないで」
+   - Claude Desktopが内部的にMCPツールを呼び出し、SQL知識ベースを参照
 
 4. **結果のMaxパッチを確認・必要に応じて調整**
 
@@ -47,10 +52,11 @@
 ## システムの仕組み
 
 1. **ユーザーの指示** → Claude Desktopが理解
-2. **SQL知識ベース検索** → 適切なAPI・接続パターンを特定
-3. **Min-DevKit API選択** → 最適なMax/MSP操作を決定
-4. **実行・検証** → パッチの生成と検証
-5. **結果表示** → ユーザーに結果を返却
+2. **MCPツール呼び出し** → クエリをSQL知識ベースに送信
+3. **知識ベース検索** → 適切なAPI・接続パターンを特定
+4. **Min-DevKit API選択** → 最適なMax/MSP操作を決定
+5. **実行・検証** → パッチの生成と検証
+6. **結果表示** → ユーザーに結果を返却
 
 ## ドキュメント
 
