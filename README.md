@@ -43,6 +43,13 @@ Manxoは最近、単一のSQLiteデータベースから分散型データベー
 - 複数データベースを横断した統合検索機能
 - グラフデータベースの関係性探索機能
 
+## 🔍 システム要件
+
+- Node.js 18.x以上
+- npm 8.x以上
+- Max/MSP 8.5以上
+- **注意**: このプロジェクトはmacOSでの動作を前提に開発されており、WindowsおよびLinuxでの動作検証は行っていません。これらの環境での動作に関しては保証できません。
+
 ## 🚀 はじめ方
 
 ### 📋 必要なもの
@@ -197,60 +204,6 @@ manxo/
   - Claude Desktopのログを確認してください:
     - macOS: `~/Library/Logs/Claude/mcp*.log`
     - Windows: `%APPDATA%\Claude\logs\mcp*.log`
-  - `.claude.json`の構文エラーがないか確認
+  - `claude_desktop_config.json`の構文エラーがないか確認
   - 絶対パスが正しく指定されているか確認（相対パスは使用できません）
-  - Node.jsが正しくインストールされているか確認（`node -v` コマンドで確認）
-
-- **Claude Desktopにツールが表示されない場合**:
-  - `node src/setup-claude-config.js`を実行して設定を更新
-  - Claude Desktopを完全に再起動してください
-  - MCPサーバーの起動ステータスを確認
-
-- **パッチ生成に失敗する場合**:
-  - Max/MSPのバージョンが互換性があるか確認
-  - テンプレートファイルが存在するか確認
-  - データベースが正しく移行されているか確認
-
-- **分散型DB検索に問題がある場合**:
-  - `npm run migrate:verify`を実行してデータの整合性を確認
-  - MCPツールがClaude Desktopから認識されているか確認
-  - 詳細ログを確認
-
-## 🔄 アップデート方法
-
-最新版へのアップデートは以下のコマンドで行います:
-
-```bash
-git pull
-npm install
-node src/setup-claude-config.js
-```
-
-## 💌 ライセンス
-
-このプロジェクトはMITライセンスの下で公開されています。詳細はLICENSEファイルをご覧ください。
-
-## 🙏 謝辞
-
-このプロジェクトは、Max/MSPコミュニティの知恵と、AIの可能性を組み合わせることで実現しました。
-すべての音楽家、アーティスト、開発者に感謝します！🎵✨
-
-## 🛳️ よくある質問
-
-### Q: Claude Desktopの設定ファイルはどこにありますか？
-A: 設定ファイルは以下の場所にあります:
-  - macOS: `~/Library/Application Support/Claude/.claude.json`
-  - Windows: `%APPDATA%\Claude\.claude.json`
-
-### Q: setup-claude-config.jsの実行に失敗する場合は？
-A: 手動で設定ファイルを編集することもできます。上記の「インストール方法」セクションのJSONサンプルを参考にしてください。
-
-### Q: 分散型データベースで何が改善されましたか？
-A: 以下の点が大幅に向上しました:
-  - 自然言語ベースのセマンティック検索精度
-  - 複雑な関係性に基づく推奨結果
-  - 検索パフォーマンス
-  - 豊富なメタデータと例の提供
-
-### Q: MCPサーバーの仕組みはどうなっていますか？
-A: Model Context Protocol (MCP)を使用して、Claude DesktopとManxoサーバーが通信します。Claudeは質問内容に応じて適切なMCPツールを呼び出し、Manxoサーバーが処理して結果を返します。
+  - Node.jsが正しくインストールされているか確認（`
