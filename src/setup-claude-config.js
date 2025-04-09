@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Claudeの設定ファイル(.claude.json)を自動的に更新するスクリプト
+ * Claudeの設定ファイル(claude_desktop_config.json)を自動的に更新するスクリプト
  * MCP用のツール設定を追加します
  */
 
@@ -9,8 +9,20 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-// Claudeの設定ファイルのパス
-const claudeConfigPath = path.join(os.homedir(), '.claude.json');
+// Claudeの設定ファイルのパスをプラットフォームごとに決定
+let claudeConfigPath;
+const platform = os.platform();
+
+if (platform === 'darwin') {
+    // macOS
+    claudeConfigPath = path.join(os.homedir(), 'Library', 'Application Support', 'Claude', 'claude_desktop_config.json');
+} else if (platform === 'win32') {
+    // Windows
+    claudeConfigPath = path.join(os.homedir(), 'AppData', 'Roaming', 'Claude', 'claude_desktop_config.json');
+} else {
+    // Linux またはその他のプラットフォーム
+    claudeConfigPath = path.join(os.homedir(), '.config', 'Claude', 'claude_desktop_config.json');
+}
 
 // 追加するMCPツール設定
 const mcpTools = [
