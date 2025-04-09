@@ -199,7 +199,89 @@
 }
 ```
 
-**結果**: 複数のDBから統合された詳細な情報とコード例
+**結果**:
+```json
+{
+  "integrated_results": {
+    "concept_description": "エンベロープフォロワーは入力信号の振幅エンベロープを追跡し、その情報を利用して他のパラメーターを動的に制御するための手法です。Max/MSPではenvelope~やfollower~オブジェクトを使用して実装できます。",
+    "use_cases": [
+      "ダイナミックコンプレッション",
+      "サイドチェインエフェクト",
+      "自動ゲイン調整",
+      "エンベロープ駆動フィルター"
+    ],
+    "related_objects": [
+      {
+        "name": "envelope~",
+        "description": "オーディオ信号の振幅エンベロープを検出・追跡するオブジェクト",
+        "common_connections": ["*~", "/~", "line~", "send~"],
+        "relationship_strength": 0.95
+      },
+      {
+        "name": "follower~",
+        "description": "RMS振幅フォロワー。より洗練されたエンベロープ検出を提供",
+        "common_connections": ["*~", "send~", "receive~"],
+        "relationship_strength": 0.92
+      },
+      {
+        "name": "average~",
+        "description": "信号の平均値を計算、エンベロープ検出にも使用可能",
+        "common_connections": ["*~", "/~"],
+        "relationship_strength": 0.78
+      }
+    ],
+    "example_patch": {
+      "name": "エンベロープ駆動フィルター",
+      "description": "入力信号のエンベロープでローパスフィルターのカットオフ周波数を制御",
+      "objects_used": ["adc~", "envelope~", "*~", "+~", "scale~", "filtergraph~", "biquad~", "dac~"],
+      "patch_structure": {
+        "signal_flow": "adc~ → [メインパス] → biquad~ → dac~\nadc~ → envelope~ → scale~ → +~ → filtergraph~/biquad~",
+        "control_parameters": {
+          "envelope_attack": "100ms",
+          "envelope_release": "500ms",
+          "min_cutoff": "200Hz",
+          "max_cutoff": "4000Hz"
+        }
+      },
+      "maxpat_code": {
+        "patcher": {
+          "boxes": [
+            {"box": {"id": "obj-1", "maxclass": "newobj", "text": "adc~"}},
+            {"box": {"id": "obj-2", "maxclass": "newobj", "text": "envelope~ 100 500"}},
+            {"box": {"id": "obj-3", "maxclass": "newobj", "text": "scale~ 0. 1. 200. 4000."}},
+            {"box": {"id": "obj-4", "maxclass": "newobj", "text": "+~ 200."}},
+            {"box": {"id": "obj-5", "maxclass": "newobj", "text": "biquad~ 1.0 0.0 0.0 0.0 0.0"}},
+            {"box": {"id": "obj-6", "maxclass": "newobj", "text": "filtergraph~"}},
+            {"box": {"id": "obj-7", "maxclass": "newobj", "text": "dac~"}}
+          ],
+          "lines": [
+            {"patchline": {"source": ["obj-1", 0], "destination": ["obj-2", 0]}},
+            {"patchline": {"source": ["obj-1", 0], "destination": ["obj-5", 0]}},
+            {"patchline": {"source": ["obj-2", 0], "destination": ["obj-3", 0]}},
+            {"patchline": {"source": ["obj-3", 0], "destination": ["obj-4", 0]}},
+            {"patchline": {"source": ["obj-4", 0], "destination": ["obj-6", 0]}},
+            {"patchline": {"source": ["obj-6", 0], "destination": ["obj-5", 1]}},
+            {"patchline": {"source": ["obj-5", 0], "destination": ["obj-7", 0]}}
+          ]
+        }
+      },
+      "audio_example_available": true
+    },
+    "tutorials": [
+      {
+        "title": "エンベロープフォロワーを使ったワウエフェクト",
+        "url": "examples/envelope_wah.maxpat",
+        "difficulty": "中級"
+      },
+      {
+        "title": "ダイナミックEQの作り方",
+        "url": "examples/dynamic_eq.maxpat",
+        "difficulty": "上級"
+      }
+    ]
+  }
+}
+```
 
 ## 優先順位
 1. セキュリティ強化（短期）
