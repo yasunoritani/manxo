@@ -138,33 +138,57 @@ Manxo MCPサーバーは以下のツールを提供します:
 
 ```
 manxo/
-├── src/
-│   ├── index.js                    # メインMCPサーバー
-│   ├── maxpat_generator/           # Maxパッチ生成エンジン
-│   │   ├── templates/              # 各種テンプレート
-│   │   ├── mcp-tool.js             # パッチ生成MCPツール
-│   │   └── ai-generator.js         # AI駆動型生成エンジン
-│   ├── sql_knowledge_base/         # SQLベースの知識ベース（レガシー）
-│   ├── mcp_connector/              # MCP連携モジュール（新機能）
-│   │   ├── index.js                # 分散型DB用MCPツール登録
-│   │   ├── vector-client.js        # ベクトル検索クライアント
-│   │   ├── graph-client.js         # グラフ検索クライアント
-│   │   ├── document-client.js      # ドキュメント検索クライアント
-│   │   └── README.md               # MCP連携モジュールの説明
-│   ├── mcp-server/                 # MCPサーバーコンポーネント
-│   ├── max-bridge/                 # Max/MSPとの連携モジュール
-│   └── setup-claude-config.js      # Claude設定自動更新スクリプト
-├── scripts/                        # 移行・設定スクリプト
-├── config/                         # 設定ファイル
-│   ├── database.js                 # 分散型DB設定
-│   ├── migration.js                # データ移行設定
-│   └── mcp.js                      # MCP設定
-├── data/                           # データファイル
-│   ├── vector_db/                  # ベクトルDBデータ
-│   ├── graph_db/                   # グラフDBデータ
-│   └── document_db/                # ドキュメントDBデータ
-├── tests/                          # テストファイル
-└── README.md                       # このファイル
+├── src/                          # ソースコード
+│   ├── index.js                  # メインMCPサーバーエントリーポイント
+│   ├── setup-claude-config.js    # Claude設定自動更新スクリプト
+│   ├── maxpat_generator/         # Maxパッチ生成エンジン
+│   │   ├── templates/            # パッチテンプレート
+│   │   ├── schemas/              # JSONスキーマ定義
+│   │   ├── lib/                  # ユーティリティライブラリ
+│   │   └── mcp-tool.js           # パッチ生成MCPツール
+│   ├── mcp_connector/            # 分散型データベース連携
+│   │   ├── index.js              # MCPツール登録
+│   │   ├── vector-client.js      # ベクトルDB接続クライアント
+│   │   ├── graph-client.js       # グラフDB接続クライアント
+│   │   └── document-client.js    # ドキュメントDB接続クライアント
+│   ├── max-bridge/               # Max/MSP連携
+│   ├── mcp-server/               # MCPサーバーコア
+│   ├── protocol/                 # プロトコル定義
+│   ├── sql_knowledge_base/       # SQLiteレガシーシステム
+│   ├── document_knowledge_base/  # ドキュメントDB接続モジュール
+│   ├── graph_knowledge_base/     # グラフDB接続モジュール
+│   └── vector_knowledge_base/    # ベクトルDB接続モジュール
+├── data/                         # データファイル
+│   ├── vector_db/                # ベクトルDBデータ
+│   ├── graph_db/                 # グラフDBデータ
+│   ├── document_db/              # ドキュメントDBデータ
+│   ├── extracted/                # SQLiteから抽出データ
+│   ├── transformed/              # 変換済みデータ
+│   └── backups/                  # バックアップデータ
+├── config/                       # 設定ファイル
+│   ├── database.js               # データベース設定
+│   ├── migration.js              # データ移行設定
+│   └── mcp.js                    # MCP設定
+├── scripts/                      # ユーティリティスクリプト
+│   ├── extract_sql_data.js       # SQLデータ抽出
+│   ├── convert_vector_data.js    # ベクトル変換
+│   ├── import_vector_db.js       # ベクトルDBインポート
+│   ├── import_graph_db.js        # グラフDBインポート
+│   ├── import_document_db.js     # ドキュメントDBインポート
+│   └── verify_migration.js       # 移行検証
+├── tests/                        # テストファイル
+│   ├── unit/                     # ユニットテスト
+│   └── llm_connector/            # LLM連携テスト
+├── externals/                    # 外部依存ファイル
+│   ├── llm.mcp.mxo               # LLM連携Max外部オブジェクト
+│   └── osc_bridge.mxo            # OSC連携Max外部オブジェクト
+├── assets/                       # アセットファイル
+├── node_modules/                 # Node.js依存パッケージ
+├── .env                          # 環境変数
+├── .gitignore                    # Git除外設定
+├── package.json                  # プロジェクト設定
+├── package-lock.json             # 依存関係ロック
+└── README.md                     # このファイル
 ```
 
 ## 🔧 トラブルシューティング

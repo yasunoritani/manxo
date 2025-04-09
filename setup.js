@@ -38,15 +38,30 @@ function setupDirectoryStructure () {
   console.log(`${colors.cyan}[セットアップ] ディレクトリ構造を確認しています...${colors.reset}`);
 
   const directories = [
-    'src/max-osc-bridge',
-    'src/mcp-server',
+    'src/maxpat_generator',
+    'src/maxpat_generator/templates',
+    'src/maxpat_generator/schemas',
+    'src/maxpat_generator/lib',
+    'src/mcp_connector',
     'src/max-bridge',
-    'docs',
-    'tests',
+    'src/mcp-server',
+    'src/protocol',
+    'src/sql_knowledge_base',
+    'src/document_knowledge_base',
+    'src/graph_knowledge_base',
+    'src/vector_knowledge_base',
+    'data/vector_db',
+    'data/graph_db',
+    'data/document_db',
+    'data/extracted',
+    'data/transformed',
+    'data/backups',
+    'config',
+    'scripts',
     'tests/unit',
-    'tests/integration',
-    'tests/e2e',
-    'examples'
+    'tests/llm_connector',
+    'externals',
+    'assets'
   ];
 
   directories.forEach(dir => {
