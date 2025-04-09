@@ -12,6 +12,9 @@ const sqlite3 = require('better-sqlite3');
 // Maxpatジェネレーターのツール
 const { registerMaxpatGeneratorTools } = require('./maxpat_generator/mcp-tool');
 
+// 分散型データベース連携
+const { registerDistributedDBTools } = require('./mcp_connector');
+
 // MCPサーバーの作成
 const server = new McpServer({
     id: 'mcp_max_integration',
@@ -256,17 +259,31 @@ server.registerTool({
     }
 });
 
-// Maxpatジェネレーターツールの登録
+// Maxpatジェネレーターツールを登録
 registerMaxpatGeneratorTools(server);
 
-// サーバー開始
-(async () => {
-    try {
-        const transport = new StdioServerTransport();
-        await server.start(transport);
-        console.log('Max Integration MCPサーバーが開始しました');
-    } catch (error) {
-        console.error('サーバー起動エラー:', error);
-        process.exit(1);
+// 分散型DBツールを登録
+registerDistributedDBTools(server);
+
+// MCPサーバーの起動
+const transport = new StdioServerTransport();
+server.start(transport);
+
+console.error('Max/MSP MCP Server started...');
+
+// 終了時のクリーンアップ
+process.on('exit', () => {
+    if (db) {
+        db.close();
     }
-})();
+    console.error('Max/MSP MCP Server shut down');
+});
+
+// 予期しない例外のハンドリング
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught exception:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
