@@ -43,6 +43,81 @@
    - 不要なディレクトリとファイルの削除（.github/workflows, .vscode, archives, docs, issues）
    - プロジェクト構造の最新化
 
+## MCP経由のDB利用例
+
+### ベクトルDB検索例
+**ユーザー**: 「フィルター効果を適用できるMaxオブジェクトを教えて」
+
+**Claude処理**: semanticSearchツールを呼び出し
+```json
+{
+  "query": "フィルター効果を適用できるMaxオブジェクト",
+  "limit": 5
+}
+```
+
+**結果**:
+```json
+{
+  "results": [
+    {
+      "object_name": "biquad~",
+      "description": "バイクアッドフィルター。ローパス、ハイパス、バンドパス、ノッチなど様々なフィルタータイプを適用できる",
+      "similarity": 0.89
+    },
+    {
+      "object_name": "filtergraph~",
+      "description": "フィルター特性をグラフィカルに編集・表示するインターフェース",
+      "similarity": 0.86
+    },
+    // 他の結果省略
+  ]
+}
+```
+
+### グラフDB関連性検索例
+**ユーザー**: 「delay~とどのオブジェクトをよく一緒に使うか教えて」
+
+**Claude処理**: findRelatedObjectsツールを呼び出し
+```json
+{
+  "object_name": "delay~",
+  "relationship_type": "frequently_used_with"
+}
+```
+
+**結果**:
+```json
+{
+  "related_objects": [
+    {
+      "object_name": "feedback~",
+      "relationship_strength": 0.92,
+      "common_usage": "ディレイ信号のフィードバック処理"
+    },
+    {
+      "object_name": "tapout~",
+      "relationship_strength": 0.87,
+      "common_usage": "マルチタップディレイの実装"
+    },
+    // 他の結果省略
+  ]
+}
+```
+
+### 統合検索例
+**ユーザー**: 「エンベロープフォロワーを使ったダイナミック処理を教えて」
+
+**Claude処理**: integratedSearchツールを呼び出し
+```json
+{
+  "query": "エンベロープフォロワーを使ったダイナミック処理",
+  "include_examples": true
+}
+```
+
+**結果**: 複数のDBから統合された詳細な情報とコード例
+
 ## 本番環境に向けた次のステップ
 
 ### 1. クロスプラットフォームサポート
