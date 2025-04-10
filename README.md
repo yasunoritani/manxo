@@ -122,18 +122,18 @@ Claude Desktop起動時に自動的にManxo MCPサーバーが起動します。
 
 Manxo MCPサーバーは以下のツールを提供します:
 
-### 🔍 ナレッジベースツール
+### 🔍 統合型データアクセスツール
 
-- `getMaxObject` → Maxオブジェクトの詳細情報を取得 📚
-- `searchMaxObjects` → オブジェクトを名前や説明で検索 🔎
-- `checkConnectionPattern` → オブジェクト間の接続を検証 ✅
-- `searchConnectionPatterns` → よく使われる接続パターンを検索 🔄
+- `databaseAccess` → 分散型データベース全体にアクセスする統合ツール 📊
+  - `semanticSearch` → ベクトルDBを使用して意味的な検索を実行 🔎
+  - `findRelatedObjects` → グラフDBを使用して関連オブジェクトを検索 🕸️
+  - `documentSearch` → ドキュメントDBを使用してテキスト検索を実行 📑
+  - `integratedSearch` → 複数DBを横断して統合検索を実行 🔄
 
-### 🔮 分散型DB検索ツール（新機能）
-
-- `semanticSearch` → 意味的な質問からベクトル検索を実行 💡
-- `findRelatedObjects` → グラフ構造から関連オブジェクトを探索 🕸️
-- `integratedSearch` → 複数データベースを横断した統合検索 🔄
+- `maxPatternAccess` → Max/MSPパッチパターンにアクセスする統合ツール 🧩
+  - `search` → キーワードに基づいてパターンを検索 🔍
+  - `recommend` → 特定の目的に合わせたパターンを推奨 💡
+  - `findRelated` → 特定のMax/MSPオブジェクトに関連するパターンを検索 🔗
 
 ### 🎨 パッチジェネレーターツール
 
@@ -157,7 +157,8 @@ manxo/
 │   │   ├── index.js              # MCPツール登録
 │   │   ├── vector-client.js      # ベクトルDB接続クライアント
 │   │   ├── graph-client.js       # グラフDB接続クライアント
-│   │   └── document-client.js    # ドキュメントDB接続クライアント
+│   │   ├── document-client.js    # ドキュメントDB接続クライアント
+│   │   └── maxpat_patterns_service.js # Maxパターンアクセスサービス
 │   ├── max-bridge/               # Max/MSP連携
 │   ├── mcp-server/               # MCPサーバーコア
 │   ├── protocol/                 # プロトコル定義
@@ -171,14 +172,21 @@ manxo/
 │   ├── document_db/              # ドキュメントDBデータ
 │   ├── extracted/                # SQLiteから抽出データ
 │   ├── transformed/              # 変換済みデータ
+│   │   └── maxpat_analysis/      # 分析済みMaxパッチデータ
 │   └── backups/                  # バックアップデータ
+├── max_data/                     # Maxパッチデータ収集
+│   ├── advanced_patches/         # 収集した複雑なMaxパッチ
+│   ├── basic_patches/            # 基本的なチュートリアルパッチ
+│   └── metadata/                 # パッチのメタデータ
 ├── config/                       # 設定ファイル
 │   ├── database.js               # データベース設定
 │   ├── migration.js              # データ移行設定
 │   └── mcp.js                    # MCP設定
 ├── scripts/                      # ユーティリティスクリプト
 │   ├── extract_sql_data.js       # SQLデータ抽出
-│   ├── convert_vector_data.js    # ベクトル変換
+│   ├── maxpat_collector.py       # Maxパッチ収集スクリプト
+│   ├── maxpat_analyzer.py        # Maxパッチ分析スクリプト
+│   ├── advanced_maxpat_collector.py # 高度なMaxパッチ収集
 │   ├── import_vector_db.js       # ベクトルDBインポート
 │   ├── import_graph_db.js        # グラフDBインポート
 │   ├── import_document_db.js     # ドキュメントDBインポート
@@ -195,7 +203,8 @@ manxo/
 ├── .gitignore                    # Git除外設定
 ├── package.json                  # プロジェクト設定
 ├── package-lock.json             # 依存関係ロック
-└── README.md                     # このファイル
+├── README.md                     # このファイル
+└── README_DATABASE_ACCESS.md     # データベースアクセスガイド
 ```
 
 ## 🔧 トラブルシューティング
@@ -248,16 +257,3 @@ node src/setup-claude-config.js
 A: 設定ファイルは以下の場所にあります:
   - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
   - Windows: `%APPDATA%\Claude\claude_desktop_config.json`
-
-### Q: setup-claude-config.jsの実行に失敗する場合は？
-A: 手動で設定ファイルを編集することもできます。上記の「インストール方法」セクションのJSONサンプルを参考にしてください。
-
-### Q: 分散型データベースで何が改善されましたか？
-A: 以下の点が大幅に向上しました:
-  - 自然言語ベースのセマンティック検索精度
-  - 複雑な関係性に基づく推奨結果
-  - 検索パフォーマンス
-  - 豊富なメタデータと例の提供
-
-### Q: MCPサーバーの仕組みはどうなっていますか？
-A: Model Context Protocol (MCP)を使用して、Claude DesktopとManxoサーバーが通信します。Claudeは質問内容に応じて適切なMCPツールを呼び出し、Manxoサーバーが処理して結果を返します。
